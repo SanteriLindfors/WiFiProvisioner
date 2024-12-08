@@ -1,45 +1,60 @@
 // WiFiProvisioner.cpp
 #include "WiFiProvisioner.h"
-#include "internal/provision_html.h"
+#include "html/provision_html.h"
 #include <ArduinoJson.h>
+#include <DNSServer.h>
+#include <WebServer.h>
 #include <WiFi.h>
+
+#define WIFI_PROVISIONER_LOG_DEBUG 0
+#define WIFI_PROVISIONER_LOG_INFO 1
+#define WIFI_PROVISIONER_LOG_WARN 2
+#define WIFI_PROVISIONER_LOG_ERROR 3
+
+// Enable or disable WiFiProvisioner debug logs
+#define WIFI_PROVISIONER_DEBUG
+
+#ifdef WIFI_PROVISIONER_DEBUG
+#define WIFI_PROVISIONER_DEBUG_LOG(level, format, ...)                         \
+  do {                                                                         \
+    if (level >= WIFI_PROVISIONER_LOG_INFO) {                                  \
+      Serial.printf("[%s] " format "\n",                                       \
+                    (level == WIFI_PROVISIONER_LOG_DEBUG)  ? "DEBUG"           \
+                    : (level == WIFI_PROVISIONER_LOG_INFO) ? "INFO"            \
+                    : (level == WIFI_PROVISIONER_LOG_WARN) ? "WARN"            \
+                                                           : "ERROR",          \
+                    ##__VA_ARGS__);                                            \
+    }                                                                          \
+  } while (0)
+#else
+#define DEBUG_LOG(level, format, ...)                                          \
+  do {                                                                         \
+  } while (0) // Empty macro
+#endif
 
 namespace WiFiProvisioner {
 
-WiFiProvisioner::WiFiProvisioner()
-    : m_server(nullptr), m_dns_server(nullptr), apIP(192, 168, 4, 1),
-      netMsk(255, 255, 255, 0) {}
+// Constructor: Initialize with provided config or use defaults
+WiFiProvisioner::WiFiProvisioner(const Config &config)
+    : _config(config), _server(nullptr), _dnsServer(nullptr),
+      _apIP(192, 168, 4, 1), netMsk(255, 255, 255, 0) {}
+
 WiFiProvisioner::~WiFiProvisioner() { releaseResources(); }
-void WiFiProvisioner::setShowInputField(bool value) { showInputField = value; }
-void WiFiProvisioner::setRestartOnSuccess(bool value) {
-  restartOnSuccess = value;
-}
-void WiFiProvisioner::stopServerLoop(bool value) { stopLoopFlag = value; }
+
 void WiFiProvisioner::setConnectionTimeout(unsigned long timeout) {
   connectionTimeout = timeout;
 }
 void WiFiProvisioner::releaseResources() {
-  if (m_server != nullptr) {
-    delete m_server;
-    m_server = nullptr;
+  if (_server != nullptr) {
+    delete _server;
+    _server = nullptr;
   }
-  if (m_dns_server != nullptr) {
-    delete m_dns_server;
-    m_dns_server = nullptr;
-  }
-}
-void WiFiProvisioner::enableSerialDebug(bool enable) { serialDebug = enable; }
-void WiFiProvisioner::debugPrintln(const char *message) {
-  if (serialDebug) {
-    Serial.println(message);
+  if (_dnsServer != nullptr) {
+    delete _dnsServer;
+    _dnsServer = nullptr;
   }
 }
 
-void WiFiProvisioner::debugPrintln(const String &message) {
-  if (serialDebug) {
-    Serial.println(message);
-  }
-}
 void WiFiProvisioner::resetCredentials() {
   m_preferences.begin("network", false);
   m_preferences.clear();
@@ -48,11 +63,13 @@ void WiFiProvisioner::resetCredentials() {
 void WiFiProvisioner::connectToWiFi() {
   // If connected, return immediately
   if (connectToExistingWiFINetwork()) {
-    debugPrintln("Success Wifi connection with stored credentials, returning");
+    WIFI_PROVISIONER_DEBUG_LOG(
+        WIFI_PROVISIONER_LOG_INFO,
+        "Success Wifi connection with stored credentials, returning");
     return;
   }
   // Start AP
-  setupAccessPointAndServer();
+  startProvisioning();
 }
 bool WiFiProvisioner::connectToExistingWiFINetwork() {
   // Check if existing network configuration is found
@@ -63,9 +80,10 @@ bool WiFiProvisioner::connectToExistingWiFINetwork() {
 
   if (storedSSID != "") {
     WiFi.mode(WIFI_STA); // Set Wi-Fi mode to STA
-    delay(wifiDelay);
-    debugPrintln(
-        "Found existing wifi credientials, trying to connect with timeout" +
+    delay(_wifiDelay);
+    WIFI_PROVISIONER_DEBUG_LOG(
+        WIFI_PROVISIONER_LOG_INFO,
+        "Found existing wifi credientials, trying to connect with timeout %s",
         String(connectionTimeout));
 
     // Try to Connect to the WiFi with stored credentials
@@ -76,14 +94,15 @@ bool WiFiProvisioner::connectToExistingWiFINetwork() {
     }
     unsigned long startTime = millis();
     while (WiFi.status() != WL_CONNECTED) {
-      delay(wifiDelay);
+      delay(_wifiDelay);
 
       // Check if the connection timeout is reached
       if (connectionTimeout != 0 &&
           (millis() - startTime) >= connectionTimeout) {
         WiFi.disconnect();
-        delay(wifiDelay);
-        debugPrintln(
+        delay(_wifiDelay);
+        WIFI_PROVISIONER_DEBUG_LOG(
+            WIFI_PROVISIONER_LOG_INFO,
             "Connection timeout reached, continuing to start the provision");
         return false;
       }
@@ -92,60 +111,72 @@ bool WiFiProvisioner::connectToExistingWiFINetwork() {
   }
   return false;
 }
-void WiFiProvisioner::setupAccessPointAndServer() {
-  // Call onProvision Callback if set..
+bool WiFiProvisioner::startProvisioning() {
+  // Invoke the provisioning callback if set
   if (onProvisionCallback) {
     onProvisionCallback();
   }
 
-  //  Reset the loop flag
-  stopServerLoop(false);
+  // Reset loop flag and release existing resources
+  _serverLoopFlag = false;
+  releaseResources();
 
   // Initialize the server object
-  m_server = new WebServer(80);
-  m_dns_server = new DNSServer();
+  _server = new WebServer(_serverPort);
+  _dnsServer = new DNSServer();
 
-  // Set up the WiFi mode
+  // Configure Wi-Fi to AP+STA mode
   WiFi.mode(WIFI_AP_STA);
-  delay(wifiDelay);
+  delay(_wifiDelay);
 
   // Configure the access point
-  WiFi.softAPConfig(apIP, apIP, netMsk);
-  WiFi.softAP(AP_NAME.c_str());
-  delay(wifiDelay);
-  debugPrintln("AP IP address: " + String(WiFi.softAPIP()));
+  if (!WiFi.softAPConfig(_apIP, _apIP, netMsk)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                               "Failed to configure AP IP settings");
+    return false;
+  }
+  if (!WiFi.softAP(_config.AP_NAME)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                               "Failed to start Access Point");
+    return false;
+  }
 
-  // Set up the DNS server
-  m_dns_server->setErrorReplyCode(DNSReplyCode::NoError);
-  m_dns_server->start(DNS_PORT, "*", apIP);
+  delay(_wifiDelay);
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "AP IP address: %s",
+                             WiFi.softAPIP().toString());
 
-  // Set up the web server routes
-  m_server->on("/", [this]() { this->handleRootRequest(); });
-  m_server->on("/configure", HTTP_POST,
-               [this]() { this->handleConfigureRequest(); });
-  m_server->on("/update", [this]() { this->handleUpdateRequest(); });
-  m_server->on("/generate_204", [this]() { this->handleRootRequest(); });
-  m_server->on("/fwlink", [this]() { this->handleRootRequest(); });
-  m_server->onNotFound([this]() { this->handleRootRequest(); });
-  m_server->on("/factoryreset", HTTP_POST,
-               [this]() { this->resetToFactorySettings(); });
+  // Start DNS server for captive portal
+  _dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+  _dnsServer->start(_dnsPort, "*", _apIP);
+
+  // Define HTTP server routes
+  _server->on("/", [this]() { this->handleRootRequest(); });
+  _server->on("/configure", HTTP_POST,
+              [this]() { this->handleConfigureRequest(); });
+  _server->on("/update", [this]() { this->handleUpdateRequest(); });
+  _server->on("/generate_204", [this]() { this->handleRootRequest(); });
+  _server->on("/fwlink", [this]() { this->handleRootRequest(); });
+  _server->onNotFound([this]() { this->handleRootRequest(); });
+  _server->on("/factoryreset", HTTP_POST,
+              [this]() { this->resetToFactorySettings(); });
 
   // Start the web server
-  m_server->begin();
-  debugPrintln("HTTP server started");
-  serverLoop();
+  _server->begin();
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "HTTP server started");
+  loop();
+  return true;
 }
 
-void WiFiProvisioner::serverLoop() {
-  while (!stopLoopFlag) {
+void WiFiProvisioner::loop() {
+  while (!_serverLoopFlag) {
     // DNS
-    m_dns_server->processNextRequest();
+    _dnsServer->processNextRequest();
     // HTTP
-    m_server->handleClient();
+    _server->handleClient();
   }
   releaseResources();
   WiFi.mode(WIFI_STA); // Set Wi-Fi mode back to STA
-  delay(wifiDelay);
+  delay(_wifiDelay);
 }
 
 int WiFiProvisioner::convertRRSItoLevel(int rssi) {
@@ -170,14 +201,19 @@ int WiFiProvisioner::convertRRSItoLevel(int rssi) {
 }
 
 void WiFiProvisioner::setInputCheckCallback(InputCheckCallback callback) {
-  inputCheckCallback = callback;
+  inputCheckCallback = std::move(callback);
 }
 
 void WiFiProvisioner::setFactoryResetCallback(FactoryResetCallback callback) {
-  factoryResetCallback = callback;
+  factoryResetCallback = std::move(callback);
 }
+
 void WiFiProvisioner::setOnProvisionCallback(OnProvisionCallback callback) {
-  onProvisionCallback = callback;
+  onProvisionCallback = std::move(callback);
+}
+
+void WiFiProvisioner::setOnSuccessCallback(OnSuccessCallback callback) {
+  onSuccessCallback = std::move(callback);
 }
 
 String WiFiProvisioner::getAvailableNetworks() {
@@ -186,8 +222,9 @@ String WiFiProvisioner::getAvailableNetworks() {
   JsonArray networks = jsonDoc.to<JsonArray>();
 
   JsonObject inputObj = networks.createNestedObject();
-  inputObj["show_code"] = (showInputField) ? "true" : "false";
-  debugPrintln("Starting Network Scan...");
+  inputObj["show_code"] = (_config.SHOW_INPUT_FIELD) ? "true" : "false";
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "Starting Network Scan...");
   int n = WiFi.scanNetworks(false, false);
   if (n) {
     for (int i = 0; i < n; ++i) {
@@ -201,7 +238,8 @@ String WiFiProvisioner::getAvailableNetworks() {
 
   String jsonString;
   serializeJson(jsonDoc, jsonString);
-  debugPrintln("Found Networks : " + jsonString);
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "Found Networks : %s",
+                             jsonString);
   return jsonString;
 }
 
@@ -209,195 +247,248 @@ void WiFiProvisioner::handleRootRequest() { serveRootPage(); }
 
 void WiFiProvisioner::serveRootPage() {
   //  Build the Root HTML Page
-  m_server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  m_server->send(200, "text/html", "");
+  _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  _server->send(200, "text/html", "");
 
-  m_server->sendContent_P(index_html1, strlen_P(index_html1));
-  if (HTML_TITLE != "") {
-    m_server->sendContent(HTML_TITLE);
+  _server->sendContent_P(index_html1, strlen_P(index_html1));
+  if (_config.HTML_TITLE != "") {
+    _server->sendContent(_config.HTML_TITLE);
   }
-  m_server->sendContent_P(index_html2, strlen_P(index_html2));
-  m_server->sendContent(THEME_COLOR);
-  m_server->sendContent_P(index_html3, strlen_P(index_html3));
-  if (SVG_LOGO != "") {
-    m_server->sendContent(SVG_LOGO);
+  _server->sendContent_P(index_html2, strlen_P(index_html2));
+  _server->sendContent(_config.THEME_COLOR);
+  _server->sendContent_P(index_html3, strlen_P(index_html3));
+  if (_config.SVG_LOGO != "") {
+    _server->sendContent(_config.SVG_LOGO);
   }
-  m_server->sendContent_P(index_html4, strlen_P(index_html4));
-  if (PROJECT_TITLE != "") {
-    m_server->sendContent(PROJECT_TITLE);
+  _server->sendContent_P(index_html4, strlen_P(index_html4));
+  if (_config.PROJECT_TITLE != "") {
+    _server->sendContent(_config.PROJECT_TITLE);
   }
-  m_server->sendContent_P(index_html5, strlen_P(index_html5));
-  if (PROJECT_INFO != "") {
-    m_server->sendContent(PROJECT_INFO);
+  _server->sendContent_P(index_html5, strlen_P(index_html5));
+  if (_config.PROJECT_INFO != "") {
+    _server->sendContent(_config.PROJECT_INFO);
   }
-  m_server->sendContent_P(index_html6, strlen_P(index_html6));
-  if (INPUT_TEXT != "") {
-    m_server->sendContent(INPUT_TEXT);
+  _server->sendContent_P(index_html6, strlen_P(index_html6));
+  if (_config.INPUT_TEXT != "") {
+    _server->sendContent(_config.INPUT_TEXT);
   }
-  m_server->sendContent_P(index_html7, strlen_P(index_html7));
-  if (INPUT_PLACEHOLDER != "") {
-    m_server->sendContent(INPUT_PLACEHOLDER);
+  _server->sendContent_P(index_html7, strlen_P(index_html7));
+  if (_config.INPUT_PLACEHOLDER != "") {
+    _server->sendContent(_config.INPUT_PLACEHOLDER);
   }
-  m_server->sendContent_P(index_html8, strlen_P(index_html8));
-  if (INPUT_LENGTH != "") {
-    m_server->sendContent(INPUT_LENGTH);
+  _server->sendContent_P(index_html8, strlen_P(index_html8));
+  if (_config.INPUT_LENGTH != "") {
+    _server->sendContent(_config.INPUT_LENGTH);
   } else {
-    m_server->sendContent("1000");
+    _server->sendContent("1000");
   }
-  m_server->sendContent_P(index_html9, strlen_P(index_html9));
-  if (FOOTER_INFO != "") {
-    m_server->sendContent(FOOTER_INFO);
+  _server->sendContent_P(index_html9, strlen_P(index_html9));
+  if (_config.FOOTER_INFO != "") {
+    _server->sendContent(_config.FOOTER_INFO);
   }
-  m_server->sendContent_P(index_html10, strlen_P(index_html10));
+  _server->sendContent_P(index_html10, strlen_P(index_html10));
 
   String javascriptVariables;
 
   javascriptVariables += "var invalid_code_lenght = \"";
-  javascriptVariables += INPUT_INVALID_LENGTH;
+  javascriptVariables += _config.INPUT_INVALID_LENGTH;
   javascriptVariables += "\";\n";
 
   javascriptVariables += "var invalid_code = \"";
-  javascriptVariables += INPUT_NOT_VALID;
+  javascriptVariables += _config.INPUT_NOT_VALID;
   javascriptVariables += "\";\n";
 
   javascriptVariables += "var connection_successful_text = \"";
-  javascriptVariables += CONNECTION_SUCCESSFUL;
+  javascriptVariables += _config.CONNECTION_SUCCESSFUL;
   javascriptVariables += "\";\n";
 
   javascriptVariables += "var reset_confirmation_text = \"";
-  javascriptVariables += RESET_CONFIRMATION_TEXT;
+  javascriptVariables += _config.RESET_CONFIRMATION_TEXT;
   javascriptVariables += "\";\n";
-  m_server->sendContent(javascriptVariables);
-  m_server->sendContent_P(index_html11, strlen_P(index_html11));
-  if (INPUT_LENGTH != "") {
-    m_server->sendContent("&& code_listener.value.length !=");
-    m_server->sendContent(INPUT_LENGTH);
+  _server->sendContent(javascriptVariables);
+  _server->sendContent_P(index_html11, strlen_P(index_html11));
+  if (_config.INPUT_LENGTH != "") {
+    _server->sendContent("&& code_listener.value.length !=");
+    _server->sendContent(_config.INPUT_LENGTH);
   } else {
-    m_server->sendContent("&& code_listener.value.length ==");
-    m_server->sendContent("-1");
+    _server->sendContent("&& code_listener.value.length ==");
+    _server->sendContent("-1");
   }
-  m_server->sendContent_P(index_html12, strlen_P(index_html12));
-  m_server->sendContent(""); // Mark the end of the response
-  // m_server->send(200, "text/html", index_html);
-  m_server->client().stop();
+  _server->sendContent_P(index_html12, strlen_P(index_html12));
+  _server->sendContent(""); // Mark the end of the response
+  // _server->send(200, "text/html", index_html);
+  _server->client().stop();
 }
 
 void WiFiProvisioner::handleUpdateRequest() {
-  m_server->send(200, "application/json", getAvailableNetworks());
-  m_server->client().stop();
+  _server->send(200, "application/json", getAvailableNetworks());
+  _server->client().stop();
 }
+
 void WiFiProvisioner::handleConfigureRequest() {
-  m_server->client().setTimeout(30);
+  _server->client().setTimeout(30);
 
-  if (!m_server->hasArg("plain")) {
+  if (!_server->hasArg("plain")) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+                               "No 'plain' argument found in request");
     sendBadRequestResponse();
     return;
   }
 
-  StaticJsonDocument<256> configrequest;
-  deserializeJson(configrequest, m_server->arg("plain"));
-  JsonObject conf = configrequest.as<JsonObject>();
-
-  bool hasSSID = conf.containsKey("ssid");
-  bool hasPASS = conf.containsKey("password");
-  bool hasINPUT = conf.containsKey("code");
-
-  String ssid_connect = hasSSID ? conf["ssid"].as<String>() : "";
-  String pass_connect = hasPASS ? conf["password"].as<String>() : "";
-  String input_connect = hasINPUT ? conf["code"].as<String>() : "";
-
-  debugPrintln("SSID: " + ssid_connect);
-  debugPrintln("Password: " + pass_connect);
-  debugPrintln("INPUT: " + input_connect);
-
-  if (!hasSSID) {
+  JsonDocument doc;
+  auto error = deserializeJson(doc, _server->arg("plain"));
+  if (error) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+                               "JSON parsing failed: %s", error.c_str());
     sendBadRequestResponse();
     return;
   }
 
-  WiFi.disconnect();
-  delay(wifiDelay);
-  connectToWiFiNetwork(ssid_connect, pass_connect);
+  const char *ssid_connect = doc["ssid"];
+  const char *pass_connect = doc["password"];
+  const char *input_connect = doc["code"];
 
-  if (WiFi.status() == WL_CONNECTED) {
-    // Wifi Credientials are correct, check if input check needed.
-    bool inputOK = true;
-    if (hasINPUT && inputCheckCallback) {
-      inputOK = inputCheckCallback(input_connect);
-      debugPrintln("Called input check callback, result : ");
-      debugPrintln((inputOK) ? "true" : "false");
-    }
-    handleSuccessfulConnection(inputOK, ssid_connect, pass_connect);
-  } else {
+  WIFI_PROVISIONER_DEBUG_LOG(
+      WIFI_PROVISIONER_LOG_INFO, "SSID: %s, PASSWORD: %s, INPUT: %s",
+      ssid_connect ? ssid_connect : "", pass_connect ? pass_connect : "",
+      input_connect ? input_connect : "");
+
+  if (!ssid_connect) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+                               "SSID missing from request");
+    sendBadRequestResponse();
+    return;
+  }
+
+  if (!WiFi.disconnect(false, true)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+                               "WiFi.disconnect() failed");
+    sendBadRequestResponse();
+    return;
+  }
+
+  delay(_wifiDelay);
+
+  if (!connect(ssid_connect, pass_connect)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+                               "Failed to connect to WiFi: %s with password %s",
+                               ssid_connect, pass_connect ? pass_connect : "");
     handleUnsuccessfulConnection(ssid_connect);
-  }
-}
-
-void WiFiProvisioner::connectToWiFiNetwork(const String &ssid,
-                                           const String &password) {
-  if (password.isEmpty()) {
-    WiFi.begin(ssid.c_str());
-  } else {
-    WiFi.begin(ssid.c_str(), password.c_str());
-  }
-  debugPrintln("Starting to connect");
-
-  unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED &&
-         (millis() - startTime) <= newWifiConnectionTimeout) {
-    delay(wifiDelay);
-    debugPrintln("Trying to connect...");
-  }
-}
-
-void WiFiProvisioner::handleSuccessfulConnection(bool input_ok,
-                                                 const String &ssid,
-                                                 const String &password) {
-  if (input_ok) {
-    // Save Credientials
-    saveNetworkConnectionDetails(ssid, password);
+    return;
   }
 
-  StaticJsonDocument<256> finalres;
-  finalres["success"] = input_ok;
-  finalres["ssid"] = ssid;
-  if (!input_ok) {
-    // Wifi was correct but input not, return reason to client
-    WiFi.disconnect();
-    delay(wifiDelay);
-    finalres["reason"] = "code";
+  bool status = true;
+  if (input_connect && inputCheckCallback) {
+    bool status = inputCheckCallback(input_connect);
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                               "Input check callback result: %s",
+                               status ? "true" : "false");
   }
-  String finalout;
-  serializeJson(finalres, finalout);
-  m_server->send(200, "application/json", finalout);
-  m_server->client().stop();
+
+  handleConnectionResult(status, ssid_connect);
 
   // Make sure that response is send & displayed to client properly
-  if (input_ok && restartOnSuccess) {
-    // Input was ok, restarting ESP32
+  if (status) {
+    if (onSuccessCallback) {
+      onSuccessCallback(ssid_connect, pass_connect, input_connect);
+    }
+    // Keep server alive for while for user to see result.
     delay(5000);
-    ESP.restart();
-  } else if (input_ok) {
-    delay(5000);
-    // Input was ok, signal to break from loop
-    stopServerLoop(true);
+    // Signal to break from loop
+    _serverLoopFlag = true;
+  } else {
+    WiFi.disconnect(false, true);
   }
+}
+
+bool WiFiProvisioner::connect(const char *ssid, const char *password) {
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "Attempting to connect to SSID: %s", ssid);
+
+  if (!ssid || strlen(ssid) == 0) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                               "Invalid SSID provided");
+    return false;
+  }
+
+  if (password && strlen(password) > 0) {
+    WiFi.begin(ssid, password);
+  } else {
+    WiFi.begin(ssid);
+  }
+
+  unsigned long startTime = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(_wifiDelay);
+
+    if (millis() - startTime >= newWifiConnectionTimeout) {
+      WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                                 "WiFi connection timeout reached for SSID: %s",
+                                 ssid);
+      return false;
+    }
+  }
+
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "Successfully connected to SSID: %s", ssid);
+  return true;
+}
+
+void WiFiProvisioner::handleConnectionResult(bool success, const char *ssid) {
+  JsonDocument doc;
+  doc["success"] = success;
+  doc["ssid"] = ssid;
+  if (!success) {
+    doc["reason"] = "code";
+  }
+  // String finalout;
+  // serializeJson(doc, finalout);
+  // _server->send(200, "application/json", finalout);
+  // _server->client().stop();
+
+  _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  _server->send(200, "application/json");
+  WiFiClient client = _server->client();
+  serializeJson(doc, client);
+  _server->sendContent(""); // Mark the end of the response
+  _server->client().stop();
 }
 
 void WiFiProvisioner::handleUnsuccessfulConnection(const String &ssid) {
-  // Called when connection wasn't successful with new credentials
-  WiFi.disconnect();
-  delay(wifiDelay);
+  JsonDocument doc;
+  doc["success"] = false;
+  doc["ssid"] = ssid;
+  doc["reason"] = "ssid";
 
-  StaticJsonDocument<256> res_false;
-  res_false["success"] = false;
-  res_false["ssid"] = ssid;
-  res_false["reason"] = "ssid";
+  // String output;
+  // serializeJson(res_false, output);
+  // _server->send(200, "application/json", output);
+  // _server->client().stop();
 
-  String output;
-  serializeJson(res_false, output);
-  m_server->send(200, "application/json", output);
-  m_server->client().stop();
+  // Write response headers
+  char contentLengthHeader[50];
+  snprintf(contentLengthHeader, sizeof(contentLengthHeader),
+           "Content-Length: %zu", measureJsonPretty(doc));
+
+  WiFiClient client = _server->client();
+  _server->sendContent("HTTP/1.0 200 OK");
+  _server->sendContent("Content-Type: application/json");
+  _server->sendContent("Connection: close");
+  _server->sendContent(contentLengthHeader);
+  _server->sendContent("");
+
+  // Write JSON document
+  serializeJsonPretty(doc, client);
+  _server->client().stop();
+
+  // _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  // _server->send(200, "application/json");
+  // WiFiClient client = _server->client();
+  // serializeJson(doc, client);
+  // _server->sendContent(""); // Mark the end of the response
+  // _server->client().stop();
+
+  WiFi.disconnect(false, true);
 }
 
 void WiFiProvisioner::saveNetworkConnectionDetails(const String &ssid,
@@ -409,8 +500,8 @@ void WiFiProvisioner::saveNetworkConnectionDetails(const String &ssid,
 }
 
 void WiFiProvisioner::sendBadRequestResponse() {
-  m_server->send(400, "application/json", "{}");
-  m_server->client().stop();
+  _server->send(400, "application/json", "{}");
+  _server->client().stop();
 }
 void WiFiProvisioner::resetToFactorySettings() {
   // Clear the credientials and call factoryreset callback if needed and

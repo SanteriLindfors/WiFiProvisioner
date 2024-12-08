@@ -1,15 +1,17 @@
-// provision_html.cpp
-#include "provision_html.h"
+#ifndef PROVISION_HTML_H
+#define PROVISION_HTML_H
+
+#include <Arduino.h>
 
 namespace WiFiProvisioner {
 
-const char index_html1[] PROGMEM = R"rawliteral(
+static constexpr const char index_html1[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
     <head>
         <title>)rawliteral";
 // HTML_TITLE
-const char index_html2[] PROGMEM = R"rawliteral(</title>
+static constexpr const char index_html2[] PROGMEM = R"rawliteral(</title>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0,
               maximum-scale=1">
@@ -20,7 +22,7 @@ const char index_html2[] PROGMEM = R"rawliteral(</title>
           --font-color: #1a1f36;
           --theme-color:)rawliteral";
 // THEME_COLOR
-const char index_html3[] PROGMEM = R"rawliteral(;
+static constexpr const char index_html3[] PROGMEM = R"rawliteral(;
       }
       * {
         font-family: Poppins-Regular,sans-serif;
@@ -217,13 +219,14 @@ const char index_html3[] PROGMEM = R"rawliteral(;
         <div class="header">
 )rawliteral";
 // SVG_LOGO
-const char index_html4[] PROGMEM =
+static constexpr const char index_html4[] PROGMEM =
     R"rawliteral(<h2 style="margin-top: 0.5rem;margin-bottom: 0rem;">)rawliteral";
 // PROJECT_TITLE
-const char index_html5[] PROGMEM =
+static constexpr const char index_html5[] PROGMEM =
     R"rawliteral(</h2><h4 style="margin-top:0.2rem;">Wifi Provision</h4><p id="codetext" style="opacity: 0.5;">)rawliteral";
 // PROJECT_INFO
-const char index_html6[] PROGMEM = R"rawliteral(</p><!-- Device Block -->
+static constexpr const char index_html6[] PROGMEM =
+    R"rawliteral(</p><!-- Device Block -->
                     </div>
 
                     <div id="main-card" class="card">
@@ -412,7 +415,7 @@ const char index_html9[] PROGMEM = R"rawliteral(">
                                     Reset</a></p>
                             <p class="copyright" style="opacity: 0.5;">)rawliteral";
 // FOOTER_INFO
-const char index_html10[] PROGMEM = R"rawliteral(</p>
+static constexpr const char index_html10[] PROGMEM = R"rawliteral(</p>
                         </footer>
 
                         <script>
@@ -431,11 +434,7 @@ password_listener.addEventListener('input', updateValue);)rawliteral";
 // INPUT_NOT_VALID
 // CONNECTION_SUCCESSFUL
 // RESET_CONFIRMATION_TEXT
-// var invalid_code_lenght = "";
-// var invalid_code = "";
-// var connection_successful_text = "";
-// var reset_confirmation_text = "";
-const char index_html11[] PROGMEM = R"rawliteral(
+static constexpr const char index_html11[] PROGMEM = R"rawliteral(
 window.addEventListener("load", (event) => {
   loadSSID();
 });
@@ -497,7 +496,7 @@ function submitForm(event){
   }
   if (isCodeVisible())rawliteral";
 // && code_listener.value.length != + INPUT_LENGHT or "" If INPUT_LENGHT = 0
-const char index_html12[] PROGMEM = R"rawliteral(){
+static constexpr const char index_html12[] PROGMEM = R"rawliteral(){
     showError("code",invalid_code_lenght,true);
     valid = false;
   }
@@ -782,3 +781,5 @@ function factoryReset(){
                 </html>)rawliteral";
 
 } // namespace WiFiProvisioner
+
+#endif // PROVISION_HTML_H
