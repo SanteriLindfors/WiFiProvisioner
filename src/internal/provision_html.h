@@ -635,14 +635,16 @@ function loadSSID() {
     if (this.readyState == 4 && this.status == 200) {
       document.getElementById("table-body").innerHTML = '';
       var jsonResponse = JSON.parse(this.responseText);
-      var code = (jsonResponse[0].show_code === 'true');
 
-      jsonResponse.shift();
-      for (var i = 0; i < jsonResponse.length; i++){
-        network = jsonResponse[i];
-        addTableRow(network.ssid,network.authmode,network.rssi);
+      var code = jsonResponse.show_code;
+      var networks = jsonResponse.network;
+
+      for (let i = 0; i < networks.length; i++) {
+        const network = networks[i];
+        addTableRow(network.ssid, network.authmode, network.rssi);
       }
-      (code === true) ? showcodeField(true) : showcodeField(false);
+
+      showcodeField(code);
     }
     else{
       showError("submit","Error on Refresh",true);

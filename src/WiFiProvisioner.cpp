@@ -1,6 +1,7 @@
 // WiFiProvisioner.cpp
 #include "WiFiProvisioner.h"
-#include "html/provision_html.h"
+// #include "internal/json.h"
+#include "internal/provision_html.h"
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <WebServer.h>
@@ -33,6 +34,48 @@
 #endif
 
 namespace WiFiProvisioner {
+
+namespace {
+
+int convertRRSItoLevel(int rssi) {
+  //  Convert RSSI to 0 - 4 Step level
+  int numlevels = 4;
+  int MIN_RSSI = -100;
+  int MAX_RSSI = -55;
+
+  if (rssi < MIN_RSSI) {
+    return 0;
+  } else if (rssi >= MAX_RSSI) {
+    return numlevels;
+  } else {
+    int inputRange = MAX_RSSI - MIN_RSSI;
+    int res = std::ceil((rssi - MIN_RSSI) * numlevels / inputRange);
+    if (res == 0) {
+      return 1;
+    } else {
+      return res;
+    }
+  }
+}
+
+void networkScan(JsonDocument &doc) {
+
+  JsonArray networks = doc.createNestedArray("network");
+
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "Starting Network Scan...");
+  int n = WiFi.scanNetworks(false, false);
+  if (n) {
+    for (int i = 0; i < n; ++i) {
+      JsonObject network = networks.createNestedObject();
+      network["rssi"] = convertRRSItoLevel(WiFi.RSSI(i));
+      network["ssid"] = WiFi.SSID(i);
+      network["authmode"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 0 : 1;
+    }
+  }
+}
+
+} // namespace
 
 // Constructor: Initialize with provided config or use defaults
 WiFiProvisioner::WiFiProvisioner(const Config &config)
@@ -179,27 +222,6 @@ void WiFiProvisioner::loop() {
   delay(_wifiDelay);
 }
 
-int WiFiProvisioner::convertRRSItoLevel(int rssi) {
-  //  Convert RSSI to 0 - 4 Step level
-  int numlevels = 4;
-  int MIN_RSSI = -100;
-  int MAX_RSSI = -55;
-
-  if (rssi < MIN_RSSI) {
-    return 0;
-  } else if (rssi >= MAX_RSSI) {
-    return numlevels;
-  } else {
-    int inputRange = MAX_RSSI - MIN_RSSI;
-    int res = std::ceil((rssi - MIN_RSSI) * numlevels / inputRange);
-    if (res == 0) {
-      return 1;
-    } else {
-      return res;
-    }
-  }
-}
-
 void WiFiProvisioner::setInputCheckCallback(InputCheckCallback callback) {
   inputCheckCallback = std::move(callback);
 }
@@ -214,33 +236,6 @@ void WiFiProvisioner::setOnProvisionCallback(OnProvisionCallback callback) {
 
 void WiFiProvisioner::setOnSuccessCallback(OnSuccessCallback callback) {
   onSuccessCallback = std::move(callback);
-}
-
-String WiFiProvisioner::getAvailableNetworks() {
-  //  Get Availible networks and return as json
-  StaticJsonDocument<4096> jsonDoc;
-  JsonArray networks = jsonDoc.to<JsonArray>();
-
-  JsonObject inputObj = networks.createNestedObject();
-  inputObj["show_code"] = (_config.SHOW_INPUT_FIELD) ? "true" : "false";
-  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
-                             "Starting Network Scan...");
-  int n = WiFi.scanNetworks(false, false);
-  if (n) {
-    for (int i = 0; i < n; ++i) {
-      JsonObject networkObj = networks.createNestedObject();
-      networkObj["rssi"] = convertRRSItoLevel(WiFi.RSSI(i));
-      networkObj["ssid"] = WiFi.SSID(i);
-      networkObj["authmode"] =
-          (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 0 : 1;
-    }
-  }
-
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "Found Networks : %s",
-                             jsonString);
-  return jsonString;
 }
 
 void WiFiProvisioner::handleRootRequest() { serveRootPage(); }
@@ -321,7 +316,30 @@ void WiFiProvisioner::serveRootPage() {
 }
 
 void WiFiProvisioner::handleUpdateRequest() {
-  _server->send(200, "application/json", getAvailableNetworks());
+  JsonDocument doc;
+
+  doc["show_code"] = _config.SHOW_INPUT_FIELD ? "true" : "false";
+
+  networkScan(doc);
+  // String jsonString;
+  // serializeJson(doc, jsonString);
+  // WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN, "%s",
+  //                            jsonString.c_str());
+  _server->setContentLength(measureJson(doc));
+  _server->sendHeader("Content-Type", "application/json");
+  _server->send(200);
+
+  WiFiClient client = _server->client();
+  serializeJson(doc, client);
+
+  //   _server->send(200, "application/json", R"rawliteral({
+  //   "show_code": true,
+  //   "network": [
+  //     { "ssid": "Network1", "rssi": -45, "authmode": 1 },
+  //     { "ssid": "Network2", "rssi": -70, "authmode": 0 }
+  //   ]
+  // })rawliteral");
+
   _server->client().stop();
 }
 
@@ -373,32 +391,29 @@ void WiFiProvisioner::handleConfigureRequest() {
     WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
                                "Failed to connect to WiFi: %s with password %s",
                                ssid_connect, pass_connect ? pass_connect : "");
-    handleUnsuccessfulConnection(ssid_connect);
+    handleUnsuccessfulConnection(ssid_connect, "ssid");
     return;
   }
 
-  bool status = true;
-  if (input_connect && inputCheckCallback) {
-    bool status = inputCheckCallback(input_connect);
+  if (input_connect && inputCheckCallback &&
+      !inputCheckCallback(input_connect)) {
     WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
-                               "Input check callback result: %s",
-                               status ? "true" : "false");
+                               "Input check callback failed.");
+    handleUnsuccessfulConnection(ssid_connect, "code");
+    return;
   }
 
-  handleConnectionResult(status, ssid_connect);
+  handleSuccesfulConnection(ssid_connect);
 
-  // Make sure that response is send & displayed to client properly
-  if (status) {
-    if (onSuccessCallback) {
-      onSuccessCallback(ssid_connect, pass_connect, input_connect);
-    }
-    // Keep server alive for while for user to see result.
-    delay(5000);
-    // Signal to break from loop
-    _serverLoopFlag = true;
-  } else {
-    WiFi.disconnect(false, true);
+  if (onSuccessCallback) {
+    onSuccessCallback(ssid_connect, pass_connect, input_connect);
   }
+
+  // Keep server alive for while for user to see result.
+  delay(_onSuccessDelay);
+
+  // Signal to break from loop
+  _serverLoopFlag = true;
 }
 
 bool WiFiProvisioner::connect(const char *ssid, const char *password) {
@@ -421,7 +436,7 @@ bool WiFiProvisioner::connect(const char *ssid, const char *password) {
   while (WiFi.status() != WL_CONNECTED) {
     delay(_wifiDelay);
 
-    if (millis() - startTime >= newWifiConnectionTimeout) {
+    if (millis() - startTime >= _wifiConnectionTimeout) {
       WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
                                  "WiFi connection timeout reached for SSID: %s",
                                  ssid);
@@ -434,59 +449,36 @@ bool WiFiProvisioner::connect(const char *ssid, const char *password) {
   return true;
 }
 
-void WiFiProvisioner::handleConnectionResult(bool success, const char *ssid) {
+void WiFiProvisioner::handleSuccesfulConnection(const char *ssid) {
   JsonDocument doc;
-  doc["success"] = success;
+  doc["success"] = true;
   doc["ssid"] = ssid;
-  if (!success) {
-    doc["reason"] = "code";
-  }
-  // String finalout;
-  // serializeJson(doc, finalout);
-  // _server->send(200, "application/json", finalout);
-  // _server->client().stop();
 
-  _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  _server->send(200, "application/json");
+  _server->setContentLength(measureJson(doc));
+  _server->sendHeader("Content-Type", "application/json");
+  _server->send(200);
+
   WiFiClient client = _server->client();
   serializeJson(doc, client);
-  _server->sendContent(""); // Mark the end of the response
+
   _server->client().stop();
 }
 
-void WiFiProvisioner::handleUnsuccessfulConnection(const String &ssid) {
+void WiFiProvisioner::handleUnsuccessfulConnection(const char *ssid,
+                                                   const char *reason) {
   JsonDocument doc;
   doc["success"] = false;
   doc["ssid"] = ssid;
-  doc["reason"] = "ssid";
+  doc["reason"] = reason;
 
-  // String output;
-  // serializeJson(res_false, output);
-  // _server->send(200, "application/json", output);
-  // _server->client().stop();
-
-  // Write response headers
-  char contentLengthHeader[50];
-  snprintf(contentLengthHeader, sizeof(contentLengthHeader),
-           "Content-Length: %zu", measureJsonPretty(doc));
+  _server->setContentLength(measureJson(doc));
+  _server->sendHeader("Content-Type", "application/json");
+  _server->send(200);
 
   WiFiClient client = _server->client();
-  _server->sendContent("HTTP/1.0 200 OK");
-  _server->sendContent("Content-Type: application/json");
-  _server->sendContent("Connection: close");
-  _server->sendContent(contentLengthHeader);
-  _server->sendContent("");
+  serializeJson(doc, client);
 
-  // Write JSON document
-  serializeJsonPretty(doc, client);
   _server->client().stop();
-
-  // _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  // _server->send(200, "application/json");
-  // WiFiClient client = _server->client();
-  // serializeJson(doc, client);
-  // _server->sendContent(""); // Mark the end of the response
-  // _server->client().stop();
 
   WiFi.disconnect(false, true);
 }

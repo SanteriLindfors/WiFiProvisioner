@@ -79,15 +79,13 @@ private:
   void handleRootRequest();
   void handleUpdateRequest();
   void handleConfigureRequest();
-  void handleConnectionResult(bool success, const char *ssid);
-  void handleUnsuccessfulConnection(const String &ssid);
-  void resetToFactorySettings();
   void sendBadRequestResponse();
+  void handleSuccesfulConnection(const char *ssid);
+  void handleUnsuccessfulConnection(const char *ssid, const char *reason);
+
+  void resetToFactorySettings();
   void saveNetworkConnectionDetails(const String &ssid, const String &password);
   bool connectToExistingWiFINetwork();
-
-  int convertRRSItoLevel(int rssi);
-  String getAvailableNetworks();
 
   InputCheckCallback inputCheckCallback;
   FactoryResetCallback factoryResetCallback;
@@ -100,13 +98,15 @@ private:
   Preferences m_preferences;
   IPAddress _apIP;
   IPAddress netMsk;
-  bool _serverLoopFlag = false;
-  unsigned int _wifiDelay = 100;
   const byte _dnsPort = 53;
   const unsigned int _serverPort = 80;
+  bool _serverLoopFlag = false;
+
+  unsigned int _wifiDelay = 100;
+  unsigned int _onSuccessDelay = 100;
+  unsigned int _wifiConnectionTimeout = 1000;
 
   unsigned long connectionTimeout = 0;
-  unsigned int newWifiConnectionTimeout = 10000;
 };
 
 } // namespace WiFiProvisioner
