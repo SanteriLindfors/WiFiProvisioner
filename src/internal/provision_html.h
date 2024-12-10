@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 
-namespace WiFiProvisioner {
-
 static constexpr const char index_html1[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
@@ -781,7 +779,5 @@ function factoryReset(){
 </script>
                     </body>
                 </html>)rawliteral";
-
-} // namespace WiFiProvisioner
 
 #endif // PROVISION_HTML_H

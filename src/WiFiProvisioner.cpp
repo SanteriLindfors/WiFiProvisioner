@@ -33,8 +33,6 @@
   } while (0) // Empty macro
 #endif
 
-namespace WiFiProvisioner {
-
 namespace {
 
 int convertRRSItoLevel(int rssi) {
@@ -73,26 +71,55 @@ void networkScan(JsonDocument &doc) {
       network["authmode"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? 0 : 1;
     }
   }
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "Network scan complete");
+}
+
+void sendHeader(WiFiClient &client, int statusCode, const char *contentType,
+                size_t contentLength) {
+  client.print("HTTP/1.0 ");
+  client.print(statusCode);
+  client.println(" OK");
+
+  client.print("Content-Type: ");
+  client.println(contentType);
+
+  client.print("Content-Length: ");
+  client.println(contentLength);
+
+  client.println("Connection: close");
+
+  client.println();
 }
 
 } // namespace
 
-// Constructor: Initialize with provided config or use defaults
 WiFiProvisioner::WiFiProvisioner(const Config &config)
     : _config(config), _server(nullptr), _dnsServer(nullptr),
       _apIP(192, 168, 4, 1), netMsk(255, 255, 255, 0) {}
 
 WiFiProvisioner::~WiFiProvisioner() { releaseResources(); }
 
-void WiFiProvisioner::setConnectionTimeout(unsigned long timeout) {
-  connectionTimeout = timeout;
-}
 void WiFiProvisioner::releaseResources() {
+  // Webserver
   if (_server != nullptr) {
+    if (_server->client() && _server->client().connected()) {
+      WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                                 "Closing active client connection");
+      _server->client().flush();
+      _server->client().stop();
+    }
+    _server->stop();
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "Deleting server");
     delete _server;
     _server = nullptr;
   }
+
+  // DNS
   if (_dnsServer != nullptr) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                               "Stopping DNS server");
+    _dnsServer->stop();
     delete _dnsServer;
     _dnsServer = nullptr;
   }
@@ -103,6 +130,7 @@ void WiFiProvisioner::resetCredentials() {
   m_preferences.clear();
   m_preferences.end();
 }
+
 void WiFiProvisioner::connectToWiFi() {
   // If connected, return immediately
   if (connectToExistingWiFINetwork()) {
@@ -154,6 +182,7 @@ bool WiFiProvisioner::connectToExistingWiFINetwork() {
   }
   return false;
 }
+
 bool WiFiProvisioner::startProvisioning() {
   // Invoke the provisioning callback if set
   if (onProvisionCallback) {
@@ -164,12 +193,21 @@ bool WiFiProvisioner::startProvisioning() {
   _serverLoopFlag = false;
   releaseResources();
 
+  // Disconnect
+  WiFi.disconnect(false, true);
+  delay(_wifiDelay);
+
   // Initialize the server object
   _server = new WebServer(_serverPort);
   _dnsServer = new DNSServer();
 
   // Configure Wi-Fi to AP+STA mode
-  WiFi.mode(WIFI_AP_STA);
+  if (!WiFi.mode(WIFI_AP_STA)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                               "Failed to switch to AP+STA mode");
+    return false;
+  }
+
   delay(_wifiDelay);
 
   // Configure the access point
@@ -185,14 +223,16 @@ bool WiFiProvisioner::startProvisioning() {
   }
 
   delay(_wifiDelay);
-  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "AP IP address: %s",
-                             WiFi.softAPIP().toString());
 
   // Start DNS server for captive portal
   _dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
-  _dnsServer->start(_dnsPort, "*", _apIP);
+  if (!_dnsServer->start(_dnsPort, "*", _apIP)) {
+    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_ERROR,
+                               "Failed to start DNS server");
+    return false;
+  }
 
-  // Define HTTP server routes
+  // HTTP server routes
   _server->on("/", [this]() { this->handleRootRequest(); });
   _server->on("/configure", HTTP_POST,
               [this]() { this->handleConfigureRequest(); });
@@ -205,7 +245,9 @@ bool WiFiProvisioner::startProvisioning() {
 
   // Start the web server
   _server->begin();
-  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO, "HTTP server started");
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
+                             "HTTP server started at %s",
+                             WiFi.softAPIP().toString());
   loop();
   return true;
 }
@@ -241,78 +283,51 @@ void WiFiProvisioner::setOnSuccessCallback(OnSuccessCallback callback) {
 void WiFiProvisioner::handleRootRequest() { serveRootPage(); }
 
 void WiFiProvisioner::serveRootPage() {
-  //  Build the Root HTML Page
-  _server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  _server->send(200, "text/html", "");
 
-  _server->sendContent_P(index_html1, strlen_P(index_html1));
-  if (_config.HTML_TITLE != "") {
-    _server->sendContent(_config.HTML_TITLE);
-  }
-  _server->sendContent_P(index_html2, strlen_P(index_html2));
-  _server->sendContent(_config.THEME_COLOR);
-  _server->sendContent_P(index_html3, strlen_P(index_html3));
-  if (_config.SVG_LOGO != "") {
-    _server->sendContent(_config.SVG_LOGO);
-  }
-  _server->sendContent_P(index_html4, strlen_P(index_html4));
-  if (_config.PROJECT_TITLE != "") {
-    _server->sendContent(_config.PROJECT_TITLE);
-  }
-  _server->sendContent_P(index_html5, strlen_P(index_html5));
-  if (_config.PROJECT_INFO != "") {
-    _server->sendContent(_config.PROJECT_INFO);
-  }
-  _server->sendContent_P(index_html6, strlen_P(index_html6));
-  if (_config.INPUT_TEXT != "") {
-    _server->sendContent(_config.INPUT_TEXT);
-  }
-  _server->sendContent_P(index_html7, strlen_P(index_html7));
-  if (_config.INPUT_PLACEHOLDER != "") {
-    _server->sendContent(_config.INPUT_PLACEHOLDER);
-  }
-  _server->sendContent_P(index_html8, strlen_P(index_html8));
-  if (_config.INPUT_LENGTH != "") {
-    _server->sendContent(_config.INPUT_LENGTH);
-  } else {
-    _server->sendContent("1000");
-  }
-  _server->sendContent_P(index_html9, strlen_P(index_html9));
-  if (_config.FOOTER_INFO != "") {
-    _server->sendContent(_config.FOOTER_INFO);
-  }
-  _server->sendContent_P(index_html10, strlen_P(index_html10));
+  // Calculate and send the content length
+  size_t contentLength =
+      strlen_P(index_html1) + strlen_P(index_html2) + strlen_P(index_html3) +
+      strlen_P(index_html4) + strlen_P(index_html5) + strlen_P(index_html6) +
+      strlen_P(index_html7) + strlen_P(index_html8) + strlen_P(index_html9) +
+      strlen_P(index_html10) + strlen_P(index_html11) + strlen_P(index_html12) +
+      strlen(_config.HTML_TITLE) + strlen(_config.THEME_COLOR) +
+      strlen(_config.SVG_LOGO) + strlen(_config.PROJECT_TITLE) +
+      strlen(_config.PROJECT_INFO) + strlen(_config.INPUT_TEXT) +
+      strlen(_config.INPUT_PLACEHOLDER) +
+      (strlen(_config.INPUT_LENGTH) ? strlen(_config.INPUT_LENGTH)
+                                    : 4) + // Default to 4 ("1000")
+      strlen(_config.FOOTER_INFO);
 
-  String javascriptVariables;
+  WiFiClient client = _server->client();
 
-  javascriptVariables += "var invalid_code_lenght = \"";
-  javascriptVariables += _config.INPUT_INVALID_LENGTH;
-  javascriptVariables += "\";\n";
+  sendHeader(client, 200, "text/html", contentLength);
 
-  javascriptVariables += "var invalid_code = \"";
-  javascriptVariables += _config.INPUT_NOT_VALID;
-  javascriptVariables += "\";\n";
+  // Send the body directly in chunks
+  client.write_P(index_html1, strlen_P(index_html1));
+  client.print(_config.HTML_TITLE);
+  client.write_P(index_html2, strlen_P(index_html2));
+  client.print(_config.THEME_COLOR);
+  client.write_P(index_html3, strlen_P(index_html3));
+  client.print(_config.SVG_LOGO);
+  client.write_P(index_html4, strlen_P(index_html4));
+  client.print(_config.PROJECT_TITLE);
+  client.write_P(index_html5, strlen_P(index_html5));
+  client.print(_config.PROJECT_INFO);
+  client.write_P(index_html6, strlen_P(index_html6));
+  client.print(_config.INPUT_TEXT);
+  client.write_P(index_html7, strlen_P(index_html7));
+  client.print(_config.INPUT_PLACEHOLDER);
+  client.write_P(index_html8, strlen_P(index_html8));
+  client.print(strlen(_config.INPUT_LENGTH) ? _config.INPUT_LENGTH : "1000");
+  client.write_P(index_html9, strlen_P(index_html9));
+  client.print(_config.FOOTER_INFO);
+  client.write_P(index_html10, strlen_P(index_html10));
+  client.write_P(index_html11, strlen_P(index_html11));
+  client.write_P(index_html12, strlen_P(index_html12));
 
-  javascriptVariables += "var connection_successful_text = \"";
-  javascriptVariables += _config.CONNECTION_SUCCESSFUL;
-  javascriptVariables += "\";\n";
-
-  javascriptVariables += "var reset_confirmation_text = \"";
-  javascriptVariables += _config.RESET_CONFIRMATION_TEXT;
-  javascriptVariables += "\";\n";
-  _server->sendContent(javascriptVariables);
-  _server->sendContent_P(index_html11, strlen_P(index_html11));
-  if (_config.INPUT_LENGTH != "") {
-    _server->sendContent("&& code_listener.value.length !=");
-    _server->sendContent(_config.INPUT_LENGTH);
-  } else {
-    _server->sendContent("&& code_listener.value.length ==");
-    _server->sendContent("-1");
-  }
-  _server->sendContent_P(index_html12, strlen_P(index_html12));
-  _server->sendContent(""); // Mark the end of the response
-  // _server->send(200, "text/html", index_html);
-  _server->client().stop();
+  // Close the client connection
+  client.flush();
+  client.stop();
 }
 
 void WiFiProvisioner::handleUpdateRequest() {
@@ -321,17 +336,17 @@ void WiFiProvisioner::handleUpdateRequest() {
   doc["show_code"] = _config.SHOW_INPUT_FIELD ? "true" : "false";
 
   networkScan(doc);
-  // String jsonString;
-  // serializeJson(doc, jsonString);
-  // WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN, "%s",
-  //                            jsonString.c_str());
-  _server->setContentLength(measureJson(doc));
-  _server->sendHeader("Content-Type", "application/json");
-  _server->send(200);
+
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN, "SENDING");
 
   WiFiClient client = _server->client();
+
+  sendHeader(client, 200, "application/json", measureJson(doc));
+
+  // Send the response body
   serializeJson(doc, client);
 
+  WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN, "end");
   //   _server->send(200, "application/json", R"rawliteral({
   //   "show_code": true,
   //   "network": [
@@ -340,7 +355,8 @@ void WiFiProvisioner::handleUpdateRequest() {
   //   ]
   // })rawliteral");
 
-  _server->client().stop();
+  client.flush();
+  client.stop();
 }
 
 void WiFiProvisioner::handleConfigureRequest() {
@@ -388,10 +404,18 @@ void WiFiProvisioner::handleConfigureRequest() {
   delay(_wifiDelay);
 
   if (!connect(ssid_connect, pass_connect)) {
-    WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
-                               "Failed to connect to WiFi: %s with password %s",
-                               ssid_connect, pass_connect ? pass_connect : "");
-    handleUnsuccessfulConnection(ssid_connect, "ssid");
+
+    // Keep server alive for while for user to see result.
+    delay(_onSuccessDelay);
+
+    // Signal to break from loop
+    _serverLoopFlag = true;
+
+    // WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_WARN,
+    //                            "Failed to connect to WiFi: %s with password
+    //                            %s", ssid_connect, pass_connect ? pass_connect
+    //                            : "");
+    // handleUnsuccessfulConnection(ssid_connect, "ssid");
     return;
   }
 
@@ -504,5 +528,3 @@ void WiFiProvisioner::resetToFactorySettings() {
   }
   serveRootPage();
 }
-
-} // namespace WiFiProvisioner
