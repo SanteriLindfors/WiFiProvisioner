@@ -57,8 +57,7 @@ public:
   };
 
   using InputCheckCallback = std::function<bool(const char *)>;
-  using FactoryResetCallback = std::function<void()>;
-  using OnProvisionCallback = std::function<void()>;
+  using FactoryResetCallback = std::function<bool()>;
   using OnSuccessCallback =
       std::function<void(const char *, const char *, const char *)>;
 
@@ -73,14 +72,12 @@ public:
   void resetCredentials();
   void setInputCheckCallback(InputCheckCallback callback);
   void setFactoryResetCallback(FactoryResetCallback callback);
-  void setOnProvisionCallback(OnProvisionCallback callback);
   void setOnSuccessCallback(OnSuccessCallback callback);
 
 private:
   void loop();
   bool connect(const char *ssid, const char *password);
   void releaseResources();
-  void serveRootPage();
   void handleRootRequest();
   void handleUpdateRequest();
   void handleConfigureRequest();
@@ -94,7 +91,6 @@ private:
 
   InputCheckCallback inputCheckCallback;
   FactoryResetCallback factoryResetCallback;
-  OnProvisionCallback onProvisionCallback;
   OnSuccessCallback onSuccessCallback;
 
   Config _config;
