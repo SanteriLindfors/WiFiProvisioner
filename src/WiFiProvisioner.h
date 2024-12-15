@@ -1,7 +1,7 @@
 #ifndef WIFIPROVISIONER_H
 #define WIFIPROVISIONER_H
 
-#include <Preferences.h>
+#include <Arduino.h>
 #include <functional>
 
 class WebServer;
@@ -68,8 +68,6 @@ public:
 
   bool startProvisioning();
 
-  void connectToWiFi();
-  void resetCredentials();
   void setInputCheckCallback(InputCheckCallback callback);
   void setFactoryResetCallback(FactoryResetCallback callback);
   void setOnSuccessCallback(OnSuccessCallback callback);
@@ -79,15 +77,12 @@ private:
   bool connect(const char *ssid, const char *password);
   void releaseResources();
   void handleRootRequest();
+  void handleResetRequest();
   void handleUpdateRequest();
   void handleConfigureRequest();
   void sendBadRequestResponse();
   void handleSuccesfulConnection(const char *ssid);
   void handleUnsuccessfulConnection(const char *ssid, const char *reason);
-
-  void resetToFactorySettings();
-  void saveNetworkConnectionDetails(const String &ssid, const String &password);
-  bool connectToExistingWiFINetwork();
 
   InputCheckCallback inputCheckCallback;
   FactoryResetCallback factoryResetCallback;
@@ -96,7 +91,6 @@ private:
   Config _config;
   WebServer *_server;
   DNSServer *_dnsServer;
-  Preferences m_preferences;
   IPAddress _apIP;
   IPAddress netMsk;
   const byte _dnsPort = 53;
@@ -104,10 +98,8 @@ private:
   bool _serverLoopFlag = false;
 
   unsigned int _wifiDelay = 100;
-  unsigned int _onSuccessDelay = 100;
+  // unsigned int _onSuccessDelay = 100;
   unsigned int _wifiConnectionTimeout = 1000;
-
-  unsigned long connectionTimeout = 0;
 };
 
 #endif // WIFIPROVISIONER_H
