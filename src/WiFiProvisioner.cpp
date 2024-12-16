@@ -95,20 +95,20 @@ void sendHeader(WiFiClient &client, int statusCode, const char *contentType,
  * @brief Constructs a new WiFiProvisioner instance with the specified
  * configuration.
  *
- * @param config A reference to a `WiFiProvisioner::Config` structure containing
- * the configuration for the WiFi provisioning process. This includes settings
- * such as the Access Point name, HTML title, theme color, and other UI
- * elements.
+ * @param config A reference to a `WiFiProvisioner::Config` structure
+ * containing the configuration for the WiFi provisioning process. This
+ * includes settings such as the Access Point name, HTML title, theme color,
+ * and other UI elements.
  *
  * Example:
- * ```cpp
+ * ```
  * WiFiProvisioner::Config customConfig;
  * customConfig.AP_NAME = "MyCustomAP";
  * WiFiProvisioner provisioner(customConfig);
  * ```
  */
-WiFiProvisioner::WiFiProvisioner(const Config &config)
-    : _config(config), _server(nullptr), _dnsServer(nullptr),
+WiFiProvisioner::WiFiProvisioner(const Config &customConfig)
+    : _config(customConfig), _server(nullptr), _dnsServer(nullptr),
       _apIP(192, 168, 4, 1), netMsk(255, 255, 255, 0) {}
 
 WiFiProvisioner::~WiFiProvisioner() { releaseResources(); }
@@ -141,20 +141,23 @@ void WiFiProvisioner::releaseResources() {
 }
 
 /**
- * @brief Starts the provisioning process, setting up the device in Access Point
- * (AP) mode with a captive portal for Wi-Fi configuration.
+ * @brief Starts the provisioning process, setting up the device in Access
+ * Point (AP) mode with a captive portal for Wi-Fi configuration.
  *
  * Access Instructions:
+ *
  * 1. Open your device's Wi-Fi settings.
+ *
  * 2. Connect to the Wi-Fi network specified by `_config.AP_NAME`.
  *    - Default: "ESP32 Wi-Fi Provisioning".
+ *
  * 3. Once connected, the provisioning page should open automatically. If it
  * does not, open a web browser and navigate to `192.168.4.1`.
  *
  * @return `true` if provisioning was successful `false` otherwise.
  *
  * Example Usage:
- * ```cpp
+ * ```
  * WiFiProvisioner provisioner;
  * if (!provisioner.startProvisioning()) {
  *     Serial.println("Provisioning failed. Check logs for details.");
@@ -240,14 +243,18 @@ void WiFiProvisioner::loop() {
 }
 
 /**
- * @brief Sets the callback function to validate user input during provisioning.
+ * @brief Sets the callback function to validate user input during
+ * provisioning.
  *
  * @param callback A callable object or lambda that accepts a `const char*` as
- * input and returns a `bool`. The callback should return `true` if the input is
- * valid, or `false` otherwise.
+ * input and returns a `bool`. The callback should return `true` if the input
+ * is valid, or `false` otherwise.
+ *
+ * @note Wifi is succesfully connected when this
+ * function gets called.
  *
  * Example:
- * ```cpp
+ * ```
  * provisioner->setInputCheckCallback([](const char* input) {
  *     return strcmp(input, "1234") == 0; // Example: Validate input as "1234"
  * });
@@ -269,7 +276,7 @@ void WiFiProvisioner::setInputCheckCallback(InputCheckCallback callback) {
  * successful, and `false` otherwise.
  *
  * Example:
- * ```cpp
+ * ```
  * provisioner->setFactoryResetCallback([]() -> bool {
  *     Serial.println("Factory reset triggered!");
  *     // Perform additional cleanup here
@@ -283,23 +290,27 @@ void WiFiProvisioner::setFactoryResetCallback(FactoryResetCallback callback) {
 }
 
 /**
- * @brief Sets the callback function to handle a successful provisioning event.
+ * @brief Sets the callback function to handle a successful provisioning
+ * event.
  *
- * @param callback A callable object or lambda that accepts three `const char*`
- * parameters: `ssid`, `password`, and `input`. This is executed after a
- * successful connection to Wi-Fi and optional input validation.
+ * @param callback A callable object or lambda that accepts three `const
+ * char*` parameters: `ssid`, `password`, and `input`. This is executed after
+ * a successful connection to Wi-Fi and optional input validation has been
+ * succesfully completed.
  *
  * @note
  * - If the `SHOW_INPUT_FIELD` configuration was not enabled, the `input`
  * parameter will be `nullptr`.
+ *
  * - If the Wi-Fi network is open (no password required), the `password`
  * parameter will also be `nullptr`.
  *
  * Example:
- * ```cpp
- * provisioner->setOnSuccessCallback([](const char* ssid, const char* password,
- * const char* input) { Serial.printf("Connected to SSID: %s with password:
- * %s\n", ssid, password); if (input) { Serial.printf("Input: %s\n", input);
+ * ```
+ * provisioner->setOnSuccessCallback([](const char* ssid, const char*
+ * password, const char* input) { Serial.printf("Connected to SSID: %s with
+ * password: %s\n", ssid, password); if (input) { Serial.printf("Input: %s\n",
+ * input);
  *     }
  * });
  * ```
@@ -312,9 +323,9 @@ void WiFiProvisioner::setOnSuccessCallback(OnSuccessCallback callback) {
  * @brief Handles the HTTP `/` request by serving the main HTML page for the
  * Wi-Fi provisioning UI.
  *
- * This function responds to the root URL (`/`) by sending an HTML page composed
- * of several predefined fragments and dynamic content based on the Wi-Fi
- * provisioning configuration.
+ * This function responds to the root URL (`/`) by sending an HTML page
+ * composed of several predefined fragments and dynamic content based on the
+ * Wi-Fi provisioning configuration.
  *
  */
 void WiFiProvisioner::handleRootRequest() {
@@ -366,13 +377,13 @@ void WiFiProvisioner::handleRootRequest() {
  *        containing network scan results and configuration information.
  *
  * This function serves the `/update` endpoint of the web server. It generates
- * a JSON response that includes a list of available Wi-Fi networks with details
- * such as SSID, signal strength (RSSI), and authentication mode. It also
- * includes a flag `show_code` indicating whether the input field for additional
- * credentials is enabled.
+ * a JSON response that includes a list of available Wi-Fi networks with
+ * details such as SSID, signal strength (RSSI), and authentication mode. It
+ * also includes a flag `show_code` indicating whether the input field for
+ * additional credentials is enabled.
  *
  * Example JSON Response:
- * ```json
+ * ```
  * {
  *   "show_code": "false",
  *   "network": [
@@ -414,14 +425,17 @@ void WiFiProvisioner::handleUpdateRequest() {
  *    - `ssid` (required): The Wi-Fi network name.
  *    - `password` (optional): The Wi-Fi password.
  *    - `code` (optional): Additional input for custom validation.
+ *
  * 2. Validates the `ssid` and attempts to connect to the network.
+ *
  * 3. If the `inputCheckCallback` is set, invokes it and returns an
  * unsuccessful response if the validation fails.
+ *
  * 4. If the connection and input check is successful, invokes the
  * `onSuccessCallback` with the `ssid`, `password` and `input`.
  *
  * Example JSON Payload:
- * ```json
+ * ```
  * {
  *   "ssid": "MyNetwork",
  *   "password": "securepassword",
@@ -548,20 +562,18 @@ void WiFiProvisioner::handleSuccesfulConnection(const char *ssid) {
   doc["success"] = true;
   doc["ssid"] = ssid;
 
-  _server->setContentLength(measureJson(doc));
-  _server->sendHeader("Content-Type", "application/json");
-  _server->send(200);
-
   WiFiClient client = _server->client();
-  serializeJson(doc, client);
 
-  _server->client().flush();
-  _server->client().stop();
+  sendHeader(client, 200, "application/json", measureJson(doc));
+
+  serializeJson(doc, client);
+  client.flush();
+  client.stop();
 }
 
 /**
- * @brief Sends a failure response to the HTTP client when a Wi-Fi connection or
- * input check attempt fails.
+ * @brief Sends a failure response to the HTTP client when a Wi-Fi connection
+ * or input check attempt fails.
  *
  * @param ssid The SSID of the Wi-Fi network.
  * @param reason The reason for the failure (e.g., "ssid" or "code").
@@ -573,15 +585,13 @@ void WiFiProvisioner::handleUnsuccessfulConnection(const char *ssid,
   doc["ssid"] = ssid;
   doc["reason"] = reason;
 
-  _server->setContentLength(measureJson(doc));
-  _server->sendHeader("Content-Type", "application/json");
-  _server->send(200);
-
   WiFiClient client = _server->client();
-  serializeJson(doc, client);
 
-  _server->client().flush();
-  _server->client().stop();
+  sendHeader(client, 200, "application/json", measureJson(doc));
+
+  serializeJson(doc, client);
+  client.flush();
+  client.stop();
 
   WiFi.disconnect(false, true);
 }
@@ -657,7 +667,8 @@ void WiFiProvisioner::handleResetRequest() {
 //         delay(_wifiDelay);
 //         WIFI_PROVISIONER_DEBUG_LOG(
 //             WIFI_PROVISIONER_LOG_INFO,
-//             "Connection timeout reached, continuing to start the provision");
+//             "Connection timeout reached, continuing to start the
+//             provision");
 //         return false;
 //       }
 //     }
