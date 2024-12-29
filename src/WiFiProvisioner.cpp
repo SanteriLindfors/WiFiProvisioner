@@ -26,13 +26,27 @@
     }                                                                          \
   } while (0)
 #else
-#define DEBUG_LOG(level, format, ...)                                          \
+#define WIFI_PROVISIONER_DEBUG_LOG(level, format, ...)                         \
   do {                                                                         \
   } while (0) // Empty macro
 #endif
 
 namespace {
 
+/**
+ * @brief Converts a Received Signal Strength Indicator (RSSI) value to a signal
+ * strength level.
+ *
+ * This function maps RSSI values to a step level ranging from 0 to 4 based on
+ * predefined minimum and maximum RSSI thresholds. The returned level provides
+ * an approximation of the signal quality.
+ *
+ * @param rssi The RSSI value (usually in dBm) representing the signal strength
+ * of a Wi-Fi network. Typical values range from -100 (weakest) to -55
+ * (strongest).
+ * @return An integer in the range [0, 4], where 0 indicates very poor signal
+ * strength and 4 indicates excellent signal strength.
+ */
 int convertRRSItoLevel(int rssi) {
   //  Convert RSSI to 0 - 4 Step level
   int numlevels = 4;
@@ -54,6 +68,25 @@ int convertRRSItoLevel(int rssi) {
   }
 }
 
+/**
+ * @brief Scans for available Wi-Fi networks and populates a JSON document with
+ * the results.
+ *
+ * This function performs a Wi-Fi network scan, collecting information about
+ * each detected network, including its SSID, signal strength (converted to a
+ * level), and authentication mode. The results are stored in the provided `doc`
+ * JSON document under the "network" array.
+ *
+ * @param doc A reference to a `JsonDocument` object where the scan results will
+ * be stored. The document will contain an array of networks, each represented
+ * as a JSON object with the following keys:
+ *
+ *            - `ssid`: The network SSID (string).
+ *
+ *            - `rssi`: The signal strength level (integer, 0 to 4).
+ *
+ *            - `authmode`: The authentication mode (0 for open, 1 for secured).
+ */
 void networkScan(JsonDocument &doc) {
   JsonArray networks = doc["network"].to<JsonArray>();
 
@@ -72,6 +105,21 @@ void networkScan(JsonDocument &doc) {
                              "Network scan complete");
 }
 
+/**
+ * @brief Sends an HTTP header response to the client.
+ *
+ * This function constructs and sends the HTTP response header to the connected
+ * client, specifying the HTTP status code, content type, and content length.
+ *
+ * @param client A reference to the `WiFiClient` object representing the
+ * connected client.
+ * @param statusCode The HTTP status code (e.g., 200 for success, 404 for not
+ * found).
+ * @param contentType The MIME type of the content (e.g., "text/html",
+ * "application/json").
+ * @param contentLength The size of the content in bytes to be sent in the
+ * response.
+ */
 void sendHeader(WiFiClient &client, int statusCode, const char *contentType,
                 size_t contentLength) {
   client.print("HTTP/1.0 ");
@@ -213,9 +261,9 @@ bool WiFiProvisioner::startProvisioning() {
   _server->on("/update", [this]() { this->handleUpdateRequest(); });
   _server->on("/generate_204", [this]() { this->handleRootRequest(); });
   _server->on("/fwlink", [this]() { this->handleRootRequest(); });
-  _server->onNotFound([this]() { this->handleRootRequest(); });
   _server->on("/factoryreset", HTTP_POST,
               [this]() { this->handleResetRequest(); });
+  _server->onNotFound([this]() { this->handleRootRequest(); });
 
   // Start the web server
   _server->begin();
@@ -227,6 +275,17 @@ bool WiFiProvisioner::startProvisioning() {
   return true;
 }
 
+/**
+ * @brief Handles the main loop for the Wi-Fi provisioning process.
+ *
+ * This function continuously processes DNS and HTTP server requests while the
+ * provisioning process is active. It ensures that DNS requests are resolved to
+ * redirect clients to the provisioning page and handles HTTP client
+ * interactions.
+ *
+ * The loop runs until the `_serverLoopFlag` is set to `true`, indicating that
+ * provisioning is complete or the server needs to shut down.
+ */
 void WiFiProvisioner::loop() {
   while (!_serverLoopFlag) {
     // DNS
@@ -329,21 +388,27 @@ void WiFiProvisioner::setOnSuccessCallback(OnSuccessCallback callback) {
  *
  */
 void WiFiProvisioner::handleRootRequest() {
+  const char *showResetField = _config.SHOW_RESET_FIELD ? "true" : "false";
+  const char *showInputField = _config.SHOW_INPUT_FIELD ? "true" : "false";
+
+  char inputLengthStr[12];
+  snprintf(inputLengthStr, sizeof(inputLengthStr), "%d", _config.INPUT_LENGTH);
+
   size_t contentLength =
-      strlen_P(index_html1) + strlen_P(index_html2) + strlen_P(index_html3) +
-      strlen_P(index_html4) + strlen_P(index_html5) + strlen_P(index_html6) +
-      strlen_P(index_html7) + strlen_P(index_html8) + strlen_P(index_html9) +
-      strlen_P(index_html10) + strlen_P(index_html11) + strlen_P(index_html12) +
-      strlen(_config.HTML_TITLE) + strlen(_config.THEME_COLOR) +
-      strlen(_config.SVG_LOGO) + strlen(_config.PROJECT_TITLE) +
-      strlen(_config.PROJECT_INFO) + strlen(_config.INPUT_TEXT) +
-      strlen(_config.INPUT_PLACEHOLDER) +
-      (strlen(_config.INPUT_LENGTH) ? strlen(_config.INPUT_LENGTH)
-                                    : 4) + // Default to 4 ("1000")
-      strlen(_config.FOOTER_INFO);
+      strlen_P(index_html1) + strlen(_config.HTML_TITLE) +
+      strlen_P(index_html2) + strlen(_config.THEME_COLOR) +
+      strlen_P(index_html3) + strlen(_config.SVG_LOGO) + strlen_P(index_html4) +
+      strlen(_config.PROJECT_TITLE) + strlen_P(index_html5) +
+      strlen(_config.PROJECT_SUB_TITLE) + strlen_P(index_html6) +
+      strlen(_config.PROJECT_INFO) + strlen_P(index_html7) +
+      strlen(_config.INPUT_TEXT) + strlen_P(index_html8) +
+      strlen(inputLengthStr) + strlen_P(index_html9) +
+      strlen(_config.CONNECTION_SUCCESSFUL) + strlen_P(index_html10) +
+      strlen(_config.FOOTER_TEXT) + strlen_P(index_html11) +
+      strlen(_config.RESET_CONFIRMATION_TEXT) + strlen_P(index_html12) +
+      strlen(showResetField) + strlen_P(index_html13);
 
   WiFiClient client = _server->client();
-
   sendHeader(client, 200, "text/html", contentLength);
 
   client.write_P(index_html1, strlen_P(index_html1));
@@ -355,19 +420,22 @@ void WiFiProvisioner::handleRootRequest() {
   client.write_P(index_html4, strlen_P(index_html4));
   client.print(_config.PROJECT_TITLE);
   client.write_P(index_html5, strlen_P(index_html5));
-  client.print(_config.PROJECT_INFO);
+  client.print(_config.PROJECT_SUB_TITLE);
   client.write_P(index_html6, strlen_P(index_html6));
-  client.print(_config.INPUT_TEXT);
+  client.print(_config.PROJECT_INFO);
   client.write_P(index_html7, strlen_P(index_html7));
-  client.print(_config.INPUT_PLACEHOLDER);
+  client.print(_config.INPUT_TEXT);
   client.write_P(index_html8, strlen_P(index_html8));
-  client.print(strlen(_config.INPUT_LENGTH) ? _config.INPUT_LENGTH : "1000");
+  client.print(inputLengthStr);
   client.write_P(index_html9, strlen_P(index_html9));
-  client.print(_config.FOOTER_INFO);
+  client.print(_config.CONNECTION_SUCCESSFUL);
   client.write_P(index_html10, strlen_P(index_html10));
+  client.print(_config.FOOTER_TEXT);
   client.write_P(index_html11, strlen_P(index_html11));
+  client.print(_config.RESET_CONFIRMATION_TEXT);
   client.write_P(index_html12, strlen_P(index_html12));
-
+  client.print(showResetField);
+  client.write_P(index_html13, strlen_P(index_html13));
   client.flush();
   client.stop();
 }
@@ -617,62 +685,3 @@ void WiFiProvisioner::handleResetRequest() {
   }
   handleRootRequest();
 }
-
-// void WiFiProvisioner::resetCredentials() {
-//   m_preferences.begin("network", false);
-//   m_preferences.clear();
-//   m_preferences.end();
-// }
-
-// void WiFiProvisioner::connectToWiFi() {
-//   // If connected, return immediately
-//   if (connectToExistingWiFINetwork()) {
-//     WIFI_PROVISIONER_DEBUG_LOG(
-//         WIFI_PROVISIONER_LOG_INFO,
-//         "Success Wifi connection with stored credentials, returning");
-//     return;
-//   }
-//   // Start AP
-//   startProvisioning();
-// }
-// bool WiFiProvisioner::connectToExistingWiFINetwork() {
-//   // Check if existing network configuration is found
-//   m_preferences.begin("network", true);
-//   String storedSSID = m_preferences.getString("ssid", "");
-//   String storedPassword = m_preferences.getString("password", "");
-//   m_preferences.end();
-
-//   if (storedSSID != "") {
-//     WiFi.mode(WIFI_STA); // Set Wi-Fi mode to STA
-//     delay(_wifiDelay);
-//     WIFI_PROVISIONER_DEBUG_LOG(
-//         WIFI_PROVISIONER_LOG_INFO,
-//         "Found existing wifi credientials, trying to connect with timeout
-//         %s", String(connectionTimeout));
-
-//     // Try to Connect to the WiFi with stored credentials
-//     if (storedPassword.isEmpty()) {
-//       WiFi.begin(storedSSID.c_str());
-//     } else {
-//       WiFi.begin(storedSSID.c_str(), storedPassword.c_str());
-//     }
-//     unsigned long startTime = millis();
-//     while (WiFi.status() != WL_CONNECTED) {
-//       delay(_wifiDelay);
-
-//       // Check if the connection timeout is reached
-//       if (connectionTimeout != 0 &&
-//           (millis() - startTime) >= connectionTimeout) {
-//         WiFi.disconnect();
-//         delay(_wifiDelay);
-//         WIFI_PROVISIONER_DEBUG_LOG(
-//             WIFI_PROVISIONER_LOG_INFO,
-//             "Connection timeout reached, continuing to start the
-//             provision");
-//         return false;
-//       }
-//     }
-//     return true;
-//   }
-//   return false;
-// }
