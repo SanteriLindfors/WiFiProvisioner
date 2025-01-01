@@ -227,7 +227,7 @@ static constexpr const char index_html3[] PROGMEM = R"rawliteral(;
 
       label {
         display: block;
-        font-size: 0.8125rem;
+        font-size: 0.9rem;
         padding-bottom: 0.125rem;
       }
 
@@ -256,6 +256,7 @@ static constexpr const char index_html3[] PROGMEM = R"rawliteral(;
         background-color: var(--theme-color);
         box-shadow: 0 0.25rem 0.5rem var(--shadow-color),
           0 0.5rem 1.5rem var(--shadow-color);
+        font-size: 1rem;
         border: none;
         outline: none;
         padding: 0.625rem;
@@ -553,10 +554,10 @@ static constexpr const char index_html7[] PROGMEM =
 // INPUT_NAME
 static constexpr const char index_html8[] PROGMEM =
     R"rawliteral(`;
-      const input_lenght = `)rawliteral";
+      const input_lenght = )rawliteral";
 // INPUT_LENGHT
 static constexpr const char index_html9[] PROGMEM =
-    R"rawliteral(`;
+    R"rawliteral(;
       const connection_successful_text = `)rawliteral";
 // CONNECTION_SUCCESFUL
 static constexpr const char index_html10[] PROGMEM =
@@ -952,26 +953,22 @@ static constexpr const char index_html13[] PROGMEM =
             return response.json();
           })
           .then((jsonResponse) => {
-            if (jsonResponse.success) {
-              factoryResetSection.innerHTML = `
-                <div class="wrapper">
-                  <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-                    <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
-                    <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
-                  </svg>
-                </div>
-                <div class="container" style="padding: 1rem;">
-                  <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
-                  <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
-                  <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
-                </div>
-              `;
-              setTimeout(() => {
-                window.location.href = "/";
-              }, 7000);
-            } else {
-              throw new Error("Unexpected error occurred during reset.");
-            }
+            factoryResetSection.innerHTML = `
+                     <div class="wrapper">
+                       <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                         <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                         <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                       </svg>
+                     </div>
+                     <div class="container" style="padding: 1rem;">
+                       <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
+                       <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
+                       <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
+                     </div>
+                   `;
+            setTimeout(() => {
+              window.location.href = "/";
+            }, 7000);
           })
           .catch((error) => {
             feedback.style.color = "red";

@@ -1,53 +1,35 @@
 #include <WiFiProvisioner.h>
 
-WiFiProvisioner::WiFiProvisioner provisioner;
-
+ WiFiProvisioner provisioner;
 const int buttonPin = 9; // GPIO pin number for the built-in BOOT button
 
-bool inputValidationCallback(const String& input) {
-  Serial.println("Checking input validity...");
-  // Check if the input is valid, e.g., checking if it's "1234"
-  return input == "1234";
-}
 
-void factoryReset() {
-  // Perform your factory reset logic here
-  Serial.println("Factory reset triggered.");
-
-  // Show the input field after factory reset
-  provisioner.setShowInputField(true);
-}
-
-void onProvision() {
-  Serial.println("Provisioning started...");
-  // Use a simple if statement to conditionally show the input field
-  // For example, if a certain condition is met, show the input field
-  bool example = false;
-  if (example) {
-    provisioner.setShowInputField(true);
-  } else {
-    provisioner.setShowInputField(false);
-  }
-}
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Setup started...");
 
-  // Only when trialing, trigger provision everytime
-  provisioner.resetCredentials();
+  provisioner
+      .onInputCheck([](const char *input) -> bool {
+          return strcmp(input, "1234") == 0; // Validate input
+      })
+      .onFactoryReset([]() {
+          Serial.println("Factory reset triggered!");
+      })
+      .onSuccess([](const char *ssid, const char *password, const char *input) {
+          Serial.printf("Connected to SSID: %s\n", ssid);
+          if (password) Serial.printf("Password: %s\n", password);
+          if (input) Serial.printf("Input: %s\n", input);
+      });
 
-  //Enable Debug
-  provisioner.enableSerialDebug(true);
-  
-  // Set the input validation callback
-  provisioner.setInputCheckCallback(inputValidationCallback);
+  provisioner.startProvisioning();
 
-  // Set the factory reset callback
-  provisioner.setFactoryResetCallback(factoryReset);
+  }
 
-  // Set the onProvision callback
-  provisioner.setOnProvisionCallback(onProvision);
+void loop() {
+    // Handle Wi-Fi provisioning loop if necessary
+}
+
 
   // Set the initial input text and placeholder text
   provisioner.INPUT_TEXT = "Enter custom value:";
@@ -67,6 +49,6 @@ void loop() {
   // If the button is pressed (LOW because of the pull-up resistor), manually start the provisioning by calling the setupAccessPointAndServer() function
   if (buttonState == LOW) {
     Serial.println("Button pressed. Starting provisioning...");
-    provisioner.setupAccessPointAndServer();
+    provisioner.startProvisioning();
   }
 }

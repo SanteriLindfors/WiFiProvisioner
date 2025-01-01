@@ -217,7 +217,7 @@
 
       label {
         display: block;
-        font-size: 0.8125rem;
+        font-size: 0.9rem;
         padding-bottom: 0.125rem;
       }
 
@@ -246,6 +246,7 @@
         background-color: var(--theme-color);
         box-shadow: 0 0.25rem 0.5rem var(--shadow-color),
           0 0.5rem 1.5rem var(--shadow-color);
+        font-size: 1rem;
         border: none;
         outline: none;
         padding: 0.625rem;
@@ -921,8 +922,7 @@
             return response.json();
           })
           .then((jsonResponse) => {
-            if (jsonResponse.success) {
-              factoryResetSection.innerHTML = `
+            factoryResetSection.innerHTML = `
                      <div class="wrapper">
                        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
                          <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
@@ -935,12 +935,9 @@
                        <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
                      </div>
                    `;
-              setTimeout(() => {
-                window.location.href = "/";
-              }, 7000);
-            } else {
-              throw new Error("Unexpected error occurred during reset.");
-            }
+            setTimeout(() => {
+              window.location.href = "/";
+            }, 7000);
           })
           .catch((error) => {
             feedback.style.color = "red";
