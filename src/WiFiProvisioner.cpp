@@ -272,7 +272,7 @@ WiFiProvisioner::Config::Config(const char *apName, const char *htmlTitle,
 WiFiProvisioner::WiFiProvisioner(const Config &config)
     : _config(config), _server(nullptr), _dnsServer(nullptr),
       _apIP(192, 168, 4, 1), _netMsk(255, 255, 255, 0), _dnsPort(53),
-      _serverPort(80), _wifiDelay(100), _wifiConnectionTimeout(1000),
+      _serverPort(80), _wifiDelay(100), _wifiConnectionTimeout(10000),
       _serverLoopFlag(false) {}
 
 WiFiProvisioner::~WiFiProvisioner() { releaseResources(); }
@@ -701,6 +701,9 @@ void WiFiProvisioner::handleConfigureRequest() {
   if (onSuccessCallback) {
     onSuccessCallback(ssid_connect, pass_connect, input_connect);
   }
+
+  // Show success page for a while before closing the server
+  delay(7000);
 
   // Signal to break from loop
   _serverLoopFlag = true;

@@ -12,7 +12,9 @@ This library provides an easy-to-use, customizable solution for setting up a mod
 -   Optional input field for user-specific data
 -   Configurable connection timeout and behavior
 
-![Main Page](extras/main_page.png) ![Connection Success](extras/conenction_success.png) ![Factory Reset](extras/factory_reset.png)
+![Main Page](extras/preview.gif)
+
+![Connection Success](extras/custom.png) ![Factory Reset](extras/invalid_input.png)
 
 ## Installation
 ### Installation from ZIP file

@@ -43,7 +43,7 @@ public:
         const char *connectionSuccessful =
             "Your device is now provisioned and ready to use.",
         const char *resetConfirmationText = "This process cannot be undone.",
-        const char *inputText = "Device Key", int inputLength = 6,
+        const char *inputText = "Device Key", int inputLength = 4,
         bool showInputField = false, bool showResetField = true);
   };
 

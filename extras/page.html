@@ -919,22 +919,19 @@
             if (!response.ok) {
               throw new Error("Failed to reset the device.");
             }
-            return response.json();
-          })
-          .then((jsonResponse) => {
             factoryResetSection.innerHTML = `
-                     <div class="wrapper">
-                       <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-                         <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
-                         <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
-                       </svg>
-                     </div>
-                     <div class="container" style="padding: 1rem;">
-                       <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
-                       <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
-                       <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
-                     </div>
-                   `;
+                   <div class="wrapper">
+                     <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                       <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                       <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                     </svg>
+                   </div>
+                   <div class="container" style="padding: 1rem;">
+                     <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
+                     <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
+                     <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
+                   </div>
+                 `;
             setTimeout(() => {
               window.location.href = "/";
             }, 7000);
