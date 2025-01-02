@@ -352,7 +352,17 @@
       <div id="logo-container"></div>
       <h2 id="app-title" style="margin-top: 0.5rem; margin-bottom: 0rem"></h2>
       <h4 id="app-subtitle" style="margin-top: 0.2rem"></h4>
-      <p id="info-text" style="opacity: 0.5"></p>
+      <p
+        id="info-text"
+        style="
+          opacity: 0.5;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          max-width: 90%;
+          margin: 0 auto;
+          text-align: center;
+        "
+      ></p>
     </div>
     <div id="main-card" class="card">
       <form id="network_form" name="network_form">
@@ -660,13 +670,23 @@
         connectingState(true);
         disableForm(true);
 
-        const payload = {
-          ssid: isHidden()
-            ? ssid_listener.value
-            : document.querySelector('input[name="ssid"]:checked')?.value,
-          password: isAuth() || isHidden() ? password_listener.value : "",
-          code: isCodeVisible() ? code_listener.value : "",
-        };
+        let payload = {};
+
+        if (isHidden()) {
+          payload.ssid = ssid_listener.value;
+        } else {
+          payload.ssid = document.querySelector(
+            'input[name="ssid"]:checked'
+          )?.value;
+        }
+
+        if ((isAuth() || isHidden()) && password_listener.value) {
+          payload.password = password_listener.value;
+        }
+
+        if (isCodeVisible()) {
+          payload.code = code_listener.value;
+        }
 
         fetch("/configure", {
           method: "POST",
@@ -876,39 +896,43 @@
                  <p>Are you sure you want to reset the device to factory settings?</p>
                  <p style="color: gray; margin-top: 1rem;">${reset_confirmation_text}</p>
                  <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
-                   <a
-                     href="/"
-                     id="cancelReset"
-                     class="btn-process"
-                     style="background-color: gray; text-decoration: none; display: inline-block; text-align: center; padding: 0.625rem; color: white; border-radius: 0.3125rem;"
-                   >
-                     Cancel
-                   </a>
-                 <button
-                   id="resetYes"
-                   class="btn-process"
-                   onclick="startFactoryReset();"
-                 >
-                   Reset <span id="connecting-ring" style="display: none;"></span>
-                 </button>
+                    <button
+                      id="cancelReset"
+                      class="btn-process"
+                      style="background-color: gray;"
+                      onclick="cancelFactoryReset();"
+                      >
+                      Cancel <span id="cancel-spinner" style="display: none;"></span>
+                    </button>
+                    <button
+                      id="resetYes"
+                      class="btn-process"
+                      onclick="startFactoryReset();"
+                      >
+                      Reset <span id="connecting-ring" style="display: none;"></span>
+                    </button>
                  </div>
                  <p id="reset-feedback" class="error-message"></p>
                </div>
              `;
       }
 
+      function disableFactoryReset(state) {
+        disableLinks(state);
+        const resetButton = (document.getElementById("resetYes").disabled =
+          state);
+        const cancelButton = (document.getElementById("cancelReset").disabled =
+          state);
+      }
+
       function startFactoryReset() {
-        disableLinks(true);
+        disableFactoryReset(true);
+
         const resetButton = document.getElementById("resetYes");
-        const cancelButton = document.getElementById("cancelReset");
-        const feedback = document.getElementById("reset-feedback");
         const factoryResetSection = document.getElementById(
           "factory-reset-section"
         );
 
-        feedback.textContent = "";
-        resetButton.disabled = true;
-        cancelButton.style.pointerEvents = "none";
         resetButton.innerHTML = `Resetting<span id="connecting-ring"></span>`;
 
         fetch("/factoryreset", {
@@ -920,29 +944,36 @@
               throw new Error("Failed to reset the device.");
             }
             factoryResetSection.innerHTML = `
-                   <div class="wrapper">
-                     <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-                       <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
-                       <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
-                     </svg>
-                   </div>
-                   <div class="container" style="padding: 1rem;">
-                     <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
-                     <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
-                     <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
-                   </div>
-                 `;
+                 <div class="wrapper">
+                   <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                     <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                     <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                   </svg>
+                 </div>
+                 <div class="container" style="padding: 1rem;">
+                   <h2 style="color:#7ac142;word-break: break-word;">Reset Success</h2>
+                   <p style="color: gray;word-break: break-word;font-size:1.2rem;margin-bottom: 0.5rem;">Factory reset was successful.</p>
+                   <p style="opacity: 0.5;">Redirecting to the homepage in a few seconds...</p>
+                 </div>
+               `;
             setTimeout(() => {
               window.location.href = "/";
             }, 7000);
           })
           .catch((error) => {
-            feedback.style.color = "red";
-            feedback.textContent = error.message;
-            resetButton.disabled = false;
-            cancelButton.style.pointerEvents = "";
-            resetButton.innerHTML = `Reset`;
+            disableFactoryReset(false);
           });
+      }
+
+      function cancelFactoryReset() {
+        disableFactoryReset(true);
+
+        const spinner = document.getElementById("cancel-spinner");
+
+        spinner.style.display = "inline-block";
+        spinner.innerHTML = `<span id="connecting-ring" style="display:inline-block;"></span>`;
+
+        window.location.href = "/";
       }
     </script>
   </body>

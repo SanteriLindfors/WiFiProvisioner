@@ -420,6 +420,35 @@ void WiFiProvisioner::loop() {
 }
 
 /**
+ * @brief Registers a callback function to handle provisioning events.
+ *
+ * This callback is invoked whenever provisioning starts, allowing the user
+ * to, for example, dynamically adjust the configuration (e.g., showing or
+ * hiding the input field)
+ *
+ * @param callback A callable object or lambda that performs operations when
+ * provisioning starts.
+ *
+ * @return A reference to the `WiFiProvisioner` instance for method chaining.
+ *
+ * Example:
+ * ```
+ * provisioner.onProvision([]() {
+ *     if (hasApiKey()) {
+ *         provisioner.getConfig().SHOW_INPUT_FIELD = false;
+ *     } else {
+ *         provisioner.getConfig().SHOW_INPUT_FIELD = true;
+ *     }
+ *     Serial.println("Provisioning process has started.");
+ * });
+ * ```
+ */
+WiFiProvisioner &WiFiProvisioner::onProvision(ProvisionCallback callback) {
+  provisionCallback = std::move(callback);
+  return *this;
+}
+
+/**
  * @brief Registers a callback function to validate user input during
  * provisioning.
  *
@@ -520,6 +549,10 @@ WiFiProvisioner &WiFiProvisioner::onSuccess(SuccessCallback callback) {
  *
  */
 void WiFiProvisioner::handleRootRequest() {
+  if (provisionCallback) {
+    provisionCallback();
+  }
+
   const char *showResetField = _config.SHOW_RESET_FIELD ? "true" : "false";
   const char *showInputField = _config.SHOW_INPUT_FIELD ? "true" : "false";
 

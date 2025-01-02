@@ -47,10 +47,11 @@ public:
         bool showInputField = false, bool showResetField = true);
   };
 
+  using ProvisionCallback = std::function<void()>;
   using InputCheckCallback = std::function<bool(const char *)>;
-  using FactoryResetCallback = std::function<void()>;
   using SuccessCallback =
       std::function<void(const char *, const char *, const char *)>;
+  using FactoryResetCallback = std::function<void()>;
 
   explicit WiFiProvisioner(const Config &config = Config());
   ~WiFiProvisioner();
@@ -59,6 +60,7 @@ public:
 
   bool startProvisioning();
 
+  WiFiProvisioner &onProvision(ProvisionCallback callback);
   WiFiProvisioner &onInputCheck(InputCheckCallback callback);
   WiFiProvisioner &onFactoryReset(FactoryResetCallback callback);
   WiFiProvisioner &onSuccess(SuccessCallback callback);
@@ -75,9 +77,10 @@ private:
   void handleSuccesfulConnection();
   void handleUnsuccessfulConnection(const char *reason);
 
+  ProvisionCallback provisionCallback;
   InputCheckCallback inputCheckCallback;
-  FactoryResetCallback factoryResetCallback;
   SuccessCallback onSuccessCallback;
+  FactoryResetCallback factoryResetCallback;
 
   Config _config;
   WebServer *_server;
