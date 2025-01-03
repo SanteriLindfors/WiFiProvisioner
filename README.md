@@ -4,17 +4,29 @@ This library provides an easy-to-use, customizable solution for setting up a mod
 
 > _**Note:** This library is designed for ESP32 devices and depends on the ESP32 core and its specific libraries (DNSServer, WebServer, and WiFi). Make sure you have the ESP32 core installed in your Arduino IDE before using this library._
 
-##  Features
--   Access Point mode with captive portal for WiFi provisioning
--   Integrated web server featuring a modern and user-friendly interface
--   Easily customizable HTML content, including logo, text, and error messages
--   Callbacks for input validation and factory reset
--   Optional input field for user-specific data
--   Configurable connection timeout and behavior
+## Features
+- **Access Point Mode with Captive Portal**  
+  Quickly set up WiFi provisioning with a captive portal, accessible easily from any device.
+  <img src="extras/provision.gif" alt="Mobile" style="width: 20%;"/>
+  
+- **Lightweight and Modern Interface**  
+  A sleek, responsive, and lightweight UI.
+   <img src="extras/mobile.png" alt="Mobile" style="width: 20%;"/>
 
-![Main Page](extras/preview.gif)
+- **Simple Customization**  
+  Easily adjust colors, logos, text, and themes to match your branding or project needs.
+  <img src="extras/connect.png" alt="Customization" style="width: 20%;"/>
 
-![Connection Success](extras/custom.png) ![Factory Reset](extras/invalid_input.png)
+- **Optional Input Field**  
+  Gather user-specific data (e.g., keys, codes) during the provisioning process.
+  <img src="extras/input.png" alt="Optional Input" style="width: 20%;"/>
+  
+- **Event Callbacks**  
+  Hook into provisioning events like input validation, factory reset, and provisioning start.
+  <img src="extras/reset.gif" alt="Main Page" style="width: 20%;"/>
+
+
+80A8F5E26A
 
 ## Installation
 ### Installation from ZIP file
@@ -35,15 +47,30 @@ This library provides an easy-to-use, customizable solution for setting up a mod
 ```cpp
 #include <WiFiProvisioner.h>
 
-WiFiProvisioner::WiFiProvisioner provisioner;
-
 void setup() {
-  provisioner.connectToWiFi();
+  Serial.begin(9600);
+
+  // Create the WiFiProvisioner instance
+  WiFiProvisioner provisioner;
+
+  // Configure to hide additional fields
+  provisioner.getConfig().SHOW_INPUT_FIELD = false; // No additional input field
+  provisioner.getConfig().SHOW_RESET_FIELD = false; // No reset field
+
+  // Set the success callback
+  provisioner.onSuccess(
+      [](const char *ssid, const char *password, const char *input) {
+        Serial.printf("Provisioning successful! Connected to SSID: %s\n", ssid);
+        if (password) {
+          Serial.printf("Password: %s\n", password);
+        }
+      });
+
+  // Start provisioning
+  provisioner.startProvisioning();
 }
 
-void loop() {
-  // Your application logic here
-}
+void loop() { delay(100); }
 ```
 ## Functions
 
@@ -74,50 +101,79 @@ Enables or disables serial debug messages.
 
 ## Callback Types
 
-#### `InputCheckCallback`
-A callback function type for input validation. The callback function should take a single `const String&` parameter and return a `bool` indicating if the input is valid or not.
-This callback acts as a gatekeeper to ensure the input is correct before proceeding with the completion of the provisioning process and saving the WiFi credentials. If the input validation callback returns `false`, the error message specified by the `INPUT_NOT_VALID` customization option will be displayed. Note that to reach this callback, the WiFi connection must have been made successfully, allowing you to perform checks such as HTTP requests that require an active connection.
-Example:
-```cpp
-bool myInputCheckCallback(const String& input) {
-  // Add your custom validation logic here
-  return input == "1234";
-}
-provisioner.setInputCheckCallback(myInputCheckCallback);
-```
-#### `FactoryResetCallback`
-A callback function for performing a factory reset. The callback function should take no parameters and return no value. Implement this callback to define custom behavior when a factory reset is requested. Note that `resetCredentials` is automatically called during the factory reset process, so you don't need to call it separately in the callback.
+#### `onProvision`
+Defines actions to perform at the start of the provisioning process. 
+- Use this callback to conditionally show or hide input fields, update interface text etc..
+- The callback is invoked everytime before the provisioning portal is served.
+- This callback is also triggered **after a factory reset**, ensuring the provisioning page reflects the latest configuration when it is served again.
 
 Example:
 ```cpp
-void myFactoryResetCallback() {
-  // Add your custom factory reset logic here
-  // For example, clear saved data or restore default settings
-  // resetCredentials is automatically called, no need to call it here
-}
-provisioner.setFactoryResetCallback(myFactoryResetCallback);
-```
-#### `OnProvisionCallback`
-A callback function type for executing custom code before the provisioning process starts. The callback function should take no parameters and return no value. Implement this callback to perform any necessary setup or initialization tasks before the provisioning process begins.
-
-Example:
-```cpp
-void myOnProvisionCallback() {
-  // Add your custom code to be executed before provisioning starts
-  // For example, determine whether to show the input field or not and set text fields depending on that
-  
-  bool showInputCondition = true; // Replace this with your condition
-
-  if (showInputCondition) {
-    provisioner.setShowInputField(true);
-    provisioner.PROJECT_INFO = "Please submit the code found on your profile page.";
+provisioner.onProvision([]() {
+  if (hasApiKey()) {
+    provisioner.getConfig().SHOW_INPUT_FIELD = false;
+    Serial.println("API key exists. Input field hidden.");
   } else {
-    provisioner.setShowInputField(false);
-    provisioner.PROJECT_INFO = "";
+    provisioner.getConfig().SHOW_INPUT_FIELD = true;
+    Serial.println("No API key found. Input field shown.");
   }
-}
+});
+```
+#### `onInputCheck`
+Validates user input during the provisioning process. The callback function takes a single parameter of type `const char*` and returns a `bool` to indicate whether the input is valid.
 
-provisioner.setOnProvisionCallback(myOnProvisionCallback);
+- This callback acts as a **gatekeeper** to ensure the input meets specific criteria before completing the provisioning process and calling the `onSuccess` callback.
+- If the input validation fails (i.e., the callback returns `false`), an error message will be displayed to the user indicating the input is invalid.
+- **WiFi is already connected successfully** to reach this callback, allowing you to perform checks that require an active network connection (e.g., API calls or HTTP requests).
+  
+**Parameters**:
+- `const char* input`: The user-provided input to validate.
+
+Example:
+```cpp
+provisioner.onInputCheck([](const char *input) -> bool {
+  Serial.printf("Checking if input code equals to 1234: %s\n", input);
+  return strcmp(input, "1234") == 0; // Validate input
+})
+```
+#### `onFactoryReset`
+Allows you to define custom actions to execute when a factory reset is triggered. This is the ideal place to clear saved data, such as API keys, WiFi credentials, or any other stored inputs.
+
+- Use this callback to perform cleanup tasks.
+- The callback is invoked whenever a factory reset is initiated through the provisioning portal.
+
+Example:
+```cpp
+provisioner.onFactoryReset([]() { 
+  Serial.println("Factory reset triggered!"); 
+});
+```
+#### `onSuccess`
+Invoked after the device has been successfully connected to the Wi-Fi network and user input has been validated (if enabled). This is the final step in the provisioning process, making it an ideal place to handle post-provisioning logic, such as saving configuration.
+
+- Use this callback to store Wi-Fi credentials and input details.
+
+**Parameters**:
+- `const char* ssid`: The SSID of the connected Wi-Fi network.
+- `const char* password`: The password for the Wi-Fi network (or `nullptr` for open networks).
+- `const char* input`: The user-provided input (or `nullptr` if the input field is disabled).
+
+Example:
+```cpp
+provisioner.onSuccess([](const char *ssid, const char *password, const char *input) {
+  Serial.printf("Provisioning successful! SSID: %s\n", ssid);
+  preferences.begin("wifi-provision", false);
+  // Store the credentials and API key in preferences
+  preferences.putString("ssid", String(ssid));
+  if (password) {
+    preferences.putString("password", String(password));
+  }
+  if (input) {
+    preferences.putString("apikey", String(input));
+  }
+  preferences.end();
+  Serial.println("Credentials and API key saved.");
+});
 ```
 
 ## Customization

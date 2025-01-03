@@ -10,8 +10,7 @@
 #define WIFI_PROVISIONER_LOG_WARN 2
 #define WIFI_PROVISIONER_LOG_ERROR 3
 
-// Enable or disable WiFiProvisioner debug logs
-#define WIFI_PROVISIONER_DEBUG
+// #define WIFI_PROVISIONER_DEBUG // Uncomment to enable debug prints
 
 #ifdef WIFI_PROVISIONER_DEBUG
 #define WIFI_PROVISIONER_DEBUG_LOG(level, format, ...)                         \
@@ -278,6 +277,31 @@ WiFiProvisioner::WiFiProvisioner(const Config &config)
 WiFiProvisioner::~WiFiProvisioner() { releaseResources(); }
 
 /**
+ * @brief Provides access to the configuration structure.
+ *
+ * This method returns a reference to the `Config` structure, allowing
+ * controlled access to modify the configuration values after the instance
+ * has been created. Users should always modify the configuration through
+ * this method and never directly edit the `Config` object submitted to
+ * the constructor. This ensures consistent behavior and avoids unexpected
+ * results during the provisioning process.
+ *
+ * @return A reference to the `Config` structure of the current WiFiProvisioner
+ * instance.
+ *
+ * @note Modifications to the configuration should always be done through
+ * this method to ensure that changes are properly reflected within the
+ * `WiFiProvisioner` instance.
+ *
+ * Example Usage:
+ * ```
+ * provisioner.getConfig().AP_NAME = "UpdatedAP";
+ * provisioner.getConfig().SHOW_INPUT_FIELD = true;
+ * ```
+ */
+WiFiProvisioner::Config &WiFiProvisioner::getConfig() { return _config; }
+
+/**
  * @brief Releases resources allocated during the provisioning process.
  *
  * This method stops the web server, DNS server, and resets the Wi-Fi mode to
@@ -386,7 +410,7 @@ bool WiFiProvisioner::startProvisioning() {
 
   _server->begin();
   WIFI_PROVISIONER_DEBUG_LOG(WIFI_PROVISIONER_LOG_INFO,
-                             "HTTP server started at %s",
+                             "Provision server started at %s",
                              WiFi.softAPIP().toString());
 
   loop();
@@ -554,7 +578,6 @@ void WiFiProvisioner::handleRootRequest() {
   }
 
   const char *showResetField = _config.SHOW_RESET_FIELD ? "true" : "false";
-  const char *showInputField = _config.SHOW_INPUT_FIELD ? "true" : "false";
 
   char inputLengthStr[12];
   snprintf(inputLengthStr, sizeof(inputLengthStr), "%d", _config.INPUT_LENGTH);

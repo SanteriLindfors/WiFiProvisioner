@@ -31,10 +31,7 @@ void setup() {
   WiFiProvisioner provisioner(customCfg);
 
   // Set up callbacks
-  provisioner
-      .onProvision([]() {
-        Serial.println("Provisioning started.");
-      })
+  provisioner.onProvision([]() { Serial.println("Provisioning started."); })
       .onInputCheck([](const char *input) -> bool {
         Serial.printf("Checking if input code equals to 1234: %s\n", input);
         return strcmp(input, "1234") == 0; // Validate input

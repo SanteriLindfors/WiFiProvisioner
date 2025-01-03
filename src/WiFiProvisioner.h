@@ -56,7 +56,7 @@ public:
   explicit WiFiProvisioner(const Config &config = Config());
   ~WiFiProvisioner();
 
-  inline Config &getConfig() { return _config; }
+  Config &getConfig();
 
   bool startProvisioning();
 

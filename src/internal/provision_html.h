@@ -253,6 +253,7 @@ static constexpr const char index_html3[] PROGMEM = R"rawliteral(;
       }
 
       .btn-process {
+        -webkit-tap-highlight-color: transparent;
         background-color: var(--theme-color);
         box-shadow: 0 0.25rem 0.5rem var(--shadow-color),
           0 0.5rem 1.5rem var(--shadow-color);
@@ -510,7 +511,7 @@ static constexpr const char index_html3[] PROGMEM = R"rawliteral(;
       <p class="copyright" style="opacity: 0.5">
         <a
           role="link"
-          style="color: inherit"
+          style="color: inherit; -webkit-tap-highlight-color: transparent;"
           id="factorylink"
           href="javascript:factoryReset()"
           >Factory Reset</a
@@ -581,10 +582,10 @@ static constexpr const char index_html11[] PROGMEM =
 
 static constexpr const char index_html12[] PROGMEM =
     R"rawliteral(`;
-      const reset_show = `)rawliteral";
+      const reset_show = )rawliteral";
 // RESET_SHOW
 static constexpr const char index_html13[] PROGMEM =
-    R"rawliteral(`;
+    R"rawliteral(;
     
       window.addEventListener("DOMContentLoaded", (event) => {
         document.getElementById("logo-container").innerHTML = title_logo;
