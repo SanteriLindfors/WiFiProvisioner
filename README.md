@@ -10,7 +10,7 @@ This library provides an easy-to-use, customizable solution for setting up a mod
   <img src="extras/provision.gif" alt="Provision" style="max-width: 500px;max-height: 1000px;"/>
   
 - **Lightweight and Modern Interface**  
-  A sleek, responsive, and lightweight UI.
+  A sleek, responsive, and lightweight UI designed for both desktop and mobile devices.
   <img src="extras/mobile.png" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Simple Customization**  
