@@ -10,7 +10,7 @@
 #define WIFI_PROVISIONER_LOG_WARN 2
 #define WIFI_PROVISIONER_LOG_ERROR 3
 
-// #define WIFI_PROVISIONER_DEBUG // Uncomment to enable debug prints
+#define WIFI_PROVISIONER_DEBUG // Comment to hide debug prints
 
 #ifdef WIFI_PROVISIONER_DEBUG
 #define WIFI_PROVISIONER_DEBUG_LOG(level, format, ...)                         \

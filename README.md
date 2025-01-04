@@ -11,7 +11,7 @@ This library provides an easy-to-use, customizable solution for setting up a mod
   
 - **Lightweight and Modern Interface**  
   A sleek, responsive, and lightweight UI.
-   <img src="extras/mobile.png" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="extras/mobile.png" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Simple Customization**  
   Easily adjust colors, logos, text, and themes to match your branding or project needs.
