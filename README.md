@@ -7,23 +7,23 @@ This library provides an easy-to-use, customizable solution for setting up a mod
 ## Features
 - **Access Point Mode with Captive Portal**  
   Quickly set up WiFi provisioning with a captive portal, accessible easily from any device.
-  <img src="extras/provision.gif" alt="Provision" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="https://github.com/SanteriLindfors/WiFiProvisioner/blob/main/extras/provision.gif?raw=true" alt="Provision" style="max-width: 500px;max-height: 1000px;"/>
   
 - **Lightweight and Modern Interface**  
   A sleek, responsive, and lightweight UI designed for both desktop and mobile devices.
-  <img src="extras/mobile.png" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="https://github.com/SanteriLindfors/WiFiProvisioner/blob/main/extras/mobile.png?raw=true" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Simple Customization**  
   Easily adjust colors, logos, text, and themes to match your branding or project needs.
-  <img src="extras/connect.png" alt="Customization" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="https://github.com/SanteriLindfors/WiFiProvisioner/blob/main/extras/connect.png?raw=true" alt="Customization" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Optional Input Field**  
   Gather user-specific data (e.g., keys, codes) during the provisioning process.
-  <img src="extras/input.png" alt="Optional Input" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="https://github.com/SanteriLindfors/WiFiProvisioner/blob/main/extras/input.png?raw=true" alt="Optional Input" style="max-width: 500px;max-height: 1000px;"/>
   
 - **Event Callbacks**  
   Hook into provisioning events like input validation, factory reset, and provisioning start.
-  <img src="extras/reset.gif" alt="Reset" style="max-width: 500px;max-height: 1000px;"/>
+  <img src="https://github.com/SanteriLindfors/WiFiProvisioner/blob/main/extras/reset.gif?raw=true" alt="Reset" style="max-width: 500px;max-height: 1000px;"/>
 
 ## Installation
 ### Installation from ZIP file
