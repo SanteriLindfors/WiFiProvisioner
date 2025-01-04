@@ -7,26 +7,23 @@ This library provides an easy-to-use, customizable solution for setting up a mod
 ## Features
 - **Access Point Mode with Captive Portal**  
   Quickly set up WiFi provisioning with a captive portal, accessible easily from any device.
-  <img src="extras/provision.gif" alt="Mobile" style="width: 20%;"/>
+  <img src="extras/provision.gif" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
   
 - **Lightweight and Modern Interface**  
   A sleek, responsive, and lightweight UI.
-   <img src="extras/mobile.png" alt="Mobile" style="width: 20%;"/>
+   <img src="extras/mobile.png" alt="Mobile" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Simple Customization**  
   Easily adjust colors, logos, text, and themes to match your branding or project needs.
-  <img src="extras/connect.png" alt="Customization" style="width: 20%;"/>
+  <img src="extras/connect.png" alt="Customization" style="max-width: 500px;max-height: 1000px;"/>
 
 - **Optional Input Field**  
   Gather user-specific data (e.g., keys, codes) during the provisioning process.
-  <img src="extras/input.png" alt="Optional Input" style="width: 20%;"/>
+  <img src="extras/input.png" alt="Optional Input" style="max-width: 500px;max-height: 1000px;"/>
   
 - **Event Callbacks**  
   Hook into provisioning events like input validation, factory reset, and provisioning start.
-  <img src="extras/reset.gif" alt="Main Page" style="width: 20%;"/>
-
-
-80A8F5E26A
+  <img src="extras/reset.gif" alt="Main Page" style="max-width: 500px;max-height: 1000px;"/>
 
 ## Installation
 ### Installation from ZIP file
@@ -74,30 +71,61 @@ void loop() { delay(100); }
 ```
 ## Functions
 
-#### `connectToWiFi()`
-Initiates the connection to the WiFi network. If the device has stored credentials, it will use those. Otherwise, it will set up an access point and start the captive portal. For manual connection ip adress is `http://192.168.4.1/`
+### `WiFiProvisioner(const Config &config = Config())`
 
-#### `setupAccessPointAndServer()`
-Sets up the access point and server for the captive portal. This function is called automatically by `connectToWiFi()` if necessary.
+Constructs a new `WiFiProvisioner` instance with the specified configuration.
 
-#### `resetCredentials()`
-Resets the stored WiFi credentials.
+- Initializes the WiFiProvisioner with either the provided configuration or the default configuration.
+- The configuration dictates the behavior and appearance of the WiFi provisioning process, including AP details, UI elements, and behavioral options.
 
-#### `setConnectionTimeout(unsigned long timeout)`
-Sets the connection timeout for the WiFi connection attempt. Default timeout for existing connection is forever. If you want to try connection for a certain time, you can assign a timeout:
+#### Example Usage
 ```cpp
-provisioner.setConnectionTimeout(10000);
+// Default configuration
+WiFiProvisioner provisioner;
+
+// Custom configuration
+WiFiProvisioner::Config customConfig(
+    "CustomAP", "Custom Title", "darkblue", "<custom_svg>",
+    "Custom Project", "Custom Setup", "Custom Information",
+    "Custom Footer", "Success Message", "Are you sure?",
+    "Custom Key", 10, true, false);
+WiFiProvisioner provisioner(customConfig);
 ```
-This will try to connect for 10 seconds, and if not successful, will start the provisioning.
 
-#### `setShowInputField(bool value)`
-Shows or hides the input field in the captive portal.
+### `Config &getConfig()`
 
-#### `setRestartOnSuccess(bool value)`
-Sets whether the device should restart upon successful connection and input validation.
+Provides access to the configuration structure.
 
-#### `enableSerialDebug(bool enable)`
-Enables or disables serial debug messages.
+- This method returns a reference to the Config structure, allowing controlled access to modify the configuration values after the instance has been created.
+- Users should always use this method to modify the configuration, ensuring consistent behavior during the provisioning process.
+
+#### Example Usage
+```cpp
+WiFiProvisioner provisioner;
+provisioner.getConfig().AP_NAME = "UpdatedAP";
+provisioner.getConfig().SHOW_INPUT_FIELD = true;
+```
+
+#### `bool startProvisioning()`
+Starts the provisioning process by setting up the device in Access Point (AP) mode with a captive portal for Wi-Fi configuration.
+
+#### Access Instructions:
+1. Open your device's Wi-Fi settings.
+2. Connect to the Wi-Fi network specified by `AP_NAME` in the configuration:
+   - **Default**: `"ESP32 Wi-Fi Provisioning"`.
+3. Once connected, the provisioning page should open automatically. If it does not, open a web browser and navigate to `http://192.168.4.1/`.
+
+#### Return Value:
+- `true`: If the provisioning process is successful.
+- `false`: If the provisioning process fails.
+
+#### Example Usage
+```cpp
+WiFiProvisioner provisioner;
+if (!provisioner.startProvisioning()) {
+    Serial.println("Provisioning failed. Check logs for details.");
+}
+```
 
 ## Callback Types
 
@@ -178,37 +206,84 @@ provisioner.onSuccess([](const char *ssid, const char *password, const char *inp
 
 ## Customization
 
-You can customize various aspects of the library, such as the HTML content, input validation, and behavior after a successful connection. The following customization options are available:
+You can customize various aspects of the library, such as the HTML content, input validation, and behavior after a successful connection. The following configuration options are available in the `WiFiProvisioner::Config` struct:
 
-- `AP_NAME`: Access Point name
-- `HTML_TITLE`: Web page title
-- `THEME_COLOR`: Theme color
-- `SVG_LOGO`: Custom logo in SVG format
-- `PROJECT_TITLE`: Title displayed on the provisioning page
-- `PROJECT_INFO`: Description or instructions for the user
-- `INPUT_TEXT`: Label for the input field
-- `INPUT_PLACEHOLDER`: Placeholder text for the input field
-- `INPUT_LENGTH`: Maximum input length
-- `FOOTER_INFO`: Footer text
-- `INPUT_INVALID_LENGTH`: Error message for invalid input length
-- `INPUT_NOT_VALID`: Error message for invalid input
-- `CONNECTION_SUCCESSFUL`: Success message displayed after a successful connection
-- `RESET_CONFIRMATION_TEXT`: Confirmation text for resetting the device
+### Configuration Options
 
-For example, to change the `PROJECT_TITLE`:
+| Option                    | Description                                      |
+|---------------------------|--------------------------------------------------|
+| `AP_NAME`                 | Name of the Wi-Fi Access Point                  |
+| `HTML_TITLE`              | Title of the provisioning web page              |
+| `THEME_COLOR`             | Theme color for the provisioning UI             |
+| `SVG_LOGO`                | Custom SVG logo to display on the web page      |
+| `PROJECT_TITLE`           | Title displayed on the provisioning page        |
+| `PROJECT_SUB_TITLE`       | Subtitle displayed below the project title      |
+| `PROJECT_INFO`            | Instructions or description for the user        |
+| `FOOTER_TEXT`             | Footer text displayed at the bottom of the page |
+| `CONNECTION_SUCCESSFUL`   | Success message shown after successful connection |
+| `RESET_CONFIRMATION_TEXT` | Confirmation text for resetting the device      |
+| `INPUT_TEXT`              | Label text for the additional input field       |
+| `INPUT_LENGTH`            | Maximum length for the additional input field   |
+| `SHOW_INPUT_FIELD`        | Whether to display the additional input field   |
+| `SHOW_RESET_FIELD`        | Whether to display the factory reset option     |
+
+### Default Values
+
+- **`AP_NAME`**: `"ESP32 Wi-Fi Provisioning"`  
+- **`HTML_TITLE`**: `"Welcome to Wi-Fi Provision"`  
+- **`THEME_COLOR`**: `"dodgerblue"`  
+- **`SVG_LOGO`**: A default SVG logo  
+- **`PROJECT_TITLE`**: `"WiFi Provisioner"`  
+- **`PROJECT_SUB_TITLE`**: `"Device Setup"`  
+- **`PROJECT_INFO`**: `"Follow the steps to provision your device"`  
+- **`FOOTER_TEXT`**: `"All rights reserved © WiFiProvisioner"`  
+- **`CONNECTION_SUCCESSFUL`**: `"Your device is now provisioned and ready to use."`  
+- **`RESET_CONFIRMATION_TEXT`**: `"This process cannot be undone."`  
+- **`INPUT_TEXT`**: `"Device Key"`  
+- **`INPUT_LENGTH`**: `4`  
+- **`SHOW_INPUT_FIELD`**: `false`  
+- **`SHOW_RESET_FIELD`**: `true`  
+  
+### Customization Examples
+
+To customize the provisioning portal, you can modify the `WiFiProvisioner::Config` struct before starting the provisioning process.
+
+#### Example: Initial Customization
 
 ```cpp
-provisioner.PROJECT_TITLE = "Custom Project Title";
+WiFiProvisioner::Config customConfig(
+    "MyCustomAP",                    // Access Point Name
+    "Welcome!",                      // HTML Page Title
+    "#007BFF",                       // Theme Color
+    "<svg>...</svg>",                // SVG Logo
+    "Custom Project",                // Project Title
+    "Setup Your Device",             // Project Sub-title
+    "Follow these steps:",           // Project Info
+    "All rights reserved © MyProject", // Footer Text
+    "Connected!",                    // Success Message
+    "Reset all?",                    // Reset Confirmation Text
+    "Enter Key:",                    // Input Field Label
+    6,                               // Input Field Length
+    true,                            // Show Input Field
+    true                             // Show Reset Field
+);
+WiFiProvisioner provisioner(customConfig);
 ```
-To set a custom INPUT_LENGTH:
+
+#### Example: Modifying Config After Construction
+
+After constructing a WiFiProvisioner instance, always use the `getConfig()` method to access and modify the configuration. Avoid editing the original Config object used during construction, as the library operates on an internal copy of the configuration.
+
 ```cpp
-provisioner.INPUT_LENGTH = "5";
+// Access the configuration for modifications
+WiFiProvisioner::Config &config = provisioner.getConfig();
+
+// Update fields dynamically
+config.PROJECT_TITLE = "Updated Project Title";
+config.SVG_LOGO = R"rawliteral(<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50"><rect width="50" height="50" rx="10" ry="10" fill="#f00"/></svg>)rawliteral";
+config.THEME_COLOR = "#FF5733"; // Set a new theme color
+config.SHOW_INPUT_FIELD = false; // Hide the input field
 ```
-To set a custom SVG logo:
-```cpp
-provisioner.SVG_LOGO = R"rawliteral(<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50"><rect width="50" height="50" rx="10" ry="10" fill="#f00"/></svg>)rawliteral";
-```
-All of these customization options are set as strings
 
 ##  Examples
 The library includes examples that demonstrate different customization options. To access the examples, go to File > Examples > WiFiProvisioner in the Arduino IDE.
