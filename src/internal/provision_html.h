@@ -670,7 +670,6 @@ static constexpr const char index_html13[] PROGMEM =
               }
               if (code_listener.value.length > input_lenght) {
                 return `${input_name_text} can be up to ${input_lenght} characters`;
-               }
               }
               return null;
             })(),
